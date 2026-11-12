@@ -82,9 +82,10 @@ def match() -> None:
 def warm_translations() -> None:
     """Pre-translate demo content to Swedish so the first page load is instant."""
     from . import api
+    from .auth import SYSTEM
 
     for slug in DEMO_COMPANIES:
-        step(f"translate {slug}", lambda s: (api.company(s, "sv"), api.feed(s, lang="sv"), api.connections(s, "sv")) and "ok", slug)
+        step(f"translate {slug}", lambda s: (api.company(s, "sv", user=SYSTEM), api.feed(s, lang="sv", user=SYSTEM), api.connections(s, "sv", user=SYSTEM)) and "ok", slug)
     step("translate overview", lambda: api.overview("sv") and "ok")
 
 

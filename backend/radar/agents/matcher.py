@@ -62,7 +62,7 @@ def rank(slug: str, *, limit_per_kind: dict | None = None) -> list[dict]:
     if not opps:
         return []
 
-    claims = [c for c in profile["claims"] if c.get("review") != "rejected"]
+    claims = [c for c in profile["claims"] if c.get("review") not in ("rejected", "outdated")]
     prio_text = _priority_text(profile)
     vec = embed.vectors(
         {f"opp:{o['id']}": o["text"] for o in opps}
@@ -146,7 +146,7 @@ def explain(slug: str, opp_id: str, *, use_cache: bool = True) -> dict:
     o = db.one("SELECT * FROM opportunities WHERE id=?", (opp_id,))
     prof_lines = [f"Summary: {profile['summary']}", f"Size: {profile['size_hint']} ({profile['size_basis']})"]
     for c in profile["claims"]:
-        if c.get("review") == "rejected":
+        if c.get("review") in ("rejected", "outdated"):
             continue
         tag = "COMPANY-CONFIRMED" if (c.get("origin") == "user" or c.get("review") == "confirmed" or c["status"] == "company_confirmed") else c["status"].upper()
         prof_lines.append(f"- [{tag}] ({c['section']}) {c['statement']}")

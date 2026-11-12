@@ -78,7 +78,6 @@ function Company({ slug }: { slug: string }) {
                   <SourceLink url={c.bsp_page} label={t("co.bspPage")} />
                   <span>{t("co.version", { v: c.version, date: fmtDate(c.updated_at, lang) })}</span>
                   {p && <span>{t(`size.${p.size_hint}` as Key)}</span>}
-                  <span className="tag onnavy">{t("co.signedIn", { name: c.name })}</span>
                 </div>
               )}
             </div>
@@ -102,7 +101,7 @@ function Company({ slug }: { slug: string }) {
           feed.data && <FeedTab slug={slug} company={c?.name ?? ""} items={feed.data} onFeedback={refreshFeed} toast={setToast} onUndoable={onUndoable} />
         )}
         {tab === "profile" && (p ? (
-          <ProfileTab slug={slug} profile={p} toast={setToast}
+          <ProfileTab slug={slug} company={c?.name ?? ""} profile={p} toast={setToast}
             onSaved={(np, nf) => { company.setData({ ...c!, profile: np, version: c!.version + 1, updated_at: new Date().toISOString() }); feed.setData(nf); setTick((x) => x + 1); }} />
         ) : <div style={{ paddingTop: 32 }}><Skeleton h={360} /></div>)}
         {tab === "partners" && (
@@ -167,7 +166,7 @@ function Company({ slug }: { slug: string }) {
         {tab === "alerts" && <AlertsTab slug={slug} toast={setToast} />}
       </section>
 
-      {!chat && <button className="btn fab" onClick={() => setChat(true)}>{t("co.ask")}</button>}
+      {!chat && tab === "feed" && <button className="btn fab" onClick={() => setChat(true)}>{t("co.ask")}</button>}
       {c && <ChatDrawer slug={slug} name={c.name} open={chat} onClose={() => setChat(false)} />}
       <Toast msg={toastMsg} onDone={clearToast} action={toastAction} />
     </>

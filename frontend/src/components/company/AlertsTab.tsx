@@ -106,6 +106,7 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
               (d) => toast(d.new ? t("al.newFound", { n: d.new }) : t("al.none")))}>
             {busy ? "…" : active ? t("al.update") : t("al.subscribe")}
           </button>
+          {!active && (!consent || !email.includes("@")) && <span className="note">{t("al.needs")}</span>}
           {active && (
             <>
               <button className="btn navy" disabled={busy}

@@ -1,13 +1,60 @@
-"""SQLite storage. JSON columns keep the schema flexible during the hackathon;
-the table layout maps 1:1 to Postgres for production."""
+"""Storage: SQLite locally, Postgres when DATABASE_URL is set in .env.
+
+All modules use the same small API (rows / one / execute / upsert / session),
+written in SQLite's dialect; for Postgres the queries are adapted here:
+'?' placeholders become '%s', AUTOINCREMENT becomes SERIAL, PRAGMAs are skipped."""
 from __future__ import annotations
 
 import json
+import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from typing import Any, Iterator
 
 from .config import DB_PATH
+
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+_pool = None
+
+
+def is_postgres() -> bool:
+    return DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+
+def _pg_sql(sql: str, has_params: bool) -> str:
+    if has_params:
+        sql = sql.replace("%", "%%").replace("?", "%s")
+    return sql
+
+
+def _pg_ddl(stmt: str) -> str:
+    stmt = re.sub(r"INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY", stmt, flags=re.I)
+    return re.sub(r"\bREAL\b", "DOUBLE PRECISION", stmt)
+
+
+class _PgConn:
+    """Gives a Postgres connection the sqlite3 methods the code base uses."""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, sql: str, params: tuple | list = ()):
+        from psycopg.rows import dict_row
+
+        cur = self.conn.cursor(row_factory=dict_row)
+        cur.execute(_pg_sql(sql, bool(params)), tuple(params) if params else None)
+        return cur
+
+    def executescript(self, script: str) -> None:
+        for stmt in script.split(";"):
+            lines = [l for l in stmt.splitlines() if not l.strip().startswith("--")]
+            body = " ".join(lines).strip()
+            if body and not body.upper().startswith("PRAGMA"):
+                self.conn.execute(_pg_ddl(body))
+
+    def commit(self) -> None:
+        self.conn.commit()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pages (
@@ -114,6 +161,15 @@ CREATE TABLE IF NOT EXISTS runs (
 """
 
 
+def _pg_pool():
+    global _pool
+    if _pool is None:
+        from psycopg_pool import ConnectionPool
+
+        _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=8, kwargs={"autocommit": False}, open=True)
+    return _pool
+
+
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
@@ -124,7 +180,13 @@ def connect() -> sqlite3.Connection:
 
 
 @contextmanager
-def session() -> Iterator[sqlite3.Connection]:
+def session() -> Iterator[Any]:
+    if is_postgres():
+        with _pg_pool().connection() as raw:
+            conn = _PgConn(raw)
+            yield conn
+            conn.commit()
+        return
     conn = connect()
     try:
         yield conn
@@ -137,7 +199,11 @@ def init() -> None:
     with session() as c:
         c.executescript(SCHEMA)
         # Lightweight migrations for databases created by earlier versions.
-        cols = {r[1] for r in c.execute("PRAGMA table_info(opportunities)").fetchall()}
+        if is_postgres():
+            cols = {r["column_name"] for r in c.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name=?", ("opportunities",)).fetchall()}
+        else:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(opportunities)").fetchall()}
         if "title_sv" not in cols:
             c.execute("ALTER TABLE opportunities ADD COLUMN title_sv TEXT")
         if "contacts" not in cols:

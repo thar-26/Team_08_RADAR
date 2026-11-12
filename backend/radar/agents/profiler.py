@@ -104,7 +104,7 @@ def profile_text(profile: dict, *, include_rejected: bool = False) -> str:
     """Text used for matching. Company-confirmed and user-added claims carry most weight."""
     lines = [profile.get("summary", "")]
     for c in profile.get("claims", []):
-        if c.get("review") == "rejected" and not include_rejected:
+        if c.get("review") in ("rejected", "outdated") and not include_rejected:
             continue
         lines.append(c["statement"])
     return "\n".join(lines)

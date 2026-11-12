@@ -42,3 +42,13 @@ def test_watcher_keeps_user_decisions():
     merged = carry_over_user_decisions(old, _profile())
     assert any(c["statement"] == "Priority: pilots" for c in merged["claims"])
     assert merged["claims"][0]["review"] == "rejected"
+
+
+def test_outdated_is_stamped_and_excluded():
+    from radar.agents.profiler import profile_text
+    p, note = apply_edit(_profile(), "outdated", "a", {}, editor={"name": "Anna Berg", "email": "anna@techinova.se"})
+    c = p["claims"][0]
+    assert c["review"] == "outdated" and c["updated_by"] == "Anna Berg" and c["updated_at"]
+    assert "anna@techinova.se" not in str(p)  # email stays in the audit log, not the public profile
+    assert "Makes sensors" not in profile_text({"summary": "", "claims": p["claims"]})
+    assert note.endswith("Anna Berg")

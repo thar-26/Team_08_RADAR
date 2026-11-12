@@ -57,8 +57,10 @@ class Claim(BaseModel):
     evidence: list[Evidence] = []
     reasoning: str = ""
     origin: Literal["agent", "user"] = "agent"
-    review: Literal["unreviewed", "confirmed", "rejected", "edited"] = "unreviewed"
+    review: Literal["unreviewed", "confirmed", "rejected", "outdated", "edited"] = "unreviewed"
     note: str = ""
+    updated_by: str = ""      # who corrected it (name shown on the profile)
+    updated_at: str = ""      # when
 
 
 class Profile(BaseModel):

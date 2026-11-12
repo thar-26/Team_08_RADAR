@@ -1,9 +1,37 @@
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Error with the HTTP status, so pages can tell "sign in" (401) from "no access" (403). */
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+// Short-lived token proving who is signed in; fetched from our own Next.js route.
+let cached: { token: string | null; exp: number } | null = null;
+async function backendToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  if (cached && cached.exp - 30 > Date.now() / 1000) return cached.token;
+  try {
+    const r = await fetch("/api/backend-token", { cache: "no-store" });
+    const j = r.ok ? await r.json() : { token: null, exp: 0 };
+    cached = { token: j.token, exp: j.exp || Date.now() / 1000 + 60 };
+  } catch {
+    cached = { token: null, exp: Date.now() / 1000 + 30 };
+  }
+  return cached.token;
+}
+export const resetToken = () => { cached = null; };
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await backendToken();
   const res = await fetch(`${API}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
     cache: "no-store",
   });
   if (!res.ok) {
@@ -11,10 +39,17 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       detail = (await res.json()).detail ?? detail;
     } catch {}
-    throw new Error(detail);
+    throw new ApiError(detail, res.status);
   }
   return res.json() as Promise<T>;
 }
+
+export type Me = {
+  user: { email: string; name: string; staff: boolean } | null;
+  login_required: boolean;
+  memberships?: { slug: string; name: string; status: "approved" | "pending" | "rejected"; via: string }[];
+  suggestions?: { slug: string; name: string }[];
+};
 
 export type Evidence = { quote: string; url: string; retrieved_at: string; verified: boolean };
 export type Claim = {
@@ -25,8 +60,10 @@ export type Claim = {
   evidence: Evidence[];
   reasoning: string;
   origin: "agent" | "user";
-  review: "unreviewed" | "confirmed" | "rejected" | "edited";
+  review: "unreviewed" | "confirmed" | "rejected" | "outdated" | "edited";
   note: string;
+  updated_by?: string;
+  updated_at?: string;
 };
 export type Source = { id: number; url: string; title: string; kind: string; retrieved_at: string; injection_flag: boolean; simulated: boolean };
 export type Profile = {

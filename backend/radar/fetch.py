@@ -76,6 +76,38 @@ def get(url: str, *, use_cache: bool = True) -> dict:
     return data
 
 
+def render(url: str, *, use_cache: bool = True, wait_ms: int = 1500) -> dict:
+    """Like get(), but runs the page's JavaScript in a headless browser first —
+    for calendars that only build their event lists in the browser.
+    Same rules: robots.txt, per-host delay, on-disk cache."""
+    key = "r-" + hashlib.sha256(url.encode()).hexdigest()[:24]
+    path = CACHE / f"{key}.json"
+    if use_cache and path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    if not _allowed(url):
+        raise FetchError(f"robots.txt disallows {url}")
+    _throttle(url)
+    from playwright.sync_api import Error as PWError, sync_playwright
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_context(user_agent=USER_AGENT, locale="sv-SE").new_page()
+            resp = page.goto(url, wait_until="networkidle", timeout=45000)
+            page.wait_for_timeout(wait_ms)
+            data = {
+                "url": url, "final_url": page.url, "status": resp.status if resp else 0,
+                "html": page.content(), "text": page.inner_text("body"), "fetched_at": now_iso(),
+            }
+            browser.close()
+    except PWError as e:
+        raise FetchError(f"render failed for {url}: {e}") from e
+    if data["status"] >= 400:
+        raise FetchError(f"HTTP {data['status']} for {url}")
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return data
+
+
 def extract_text(html: str, url: str = "") -> str:
     text = trafilatura.extract(html, url=url or None, include_comments=False, include_tables=True, favor_recall=True)
     if not text:

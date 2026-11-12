@@ -10,7 +10,7 @@ from datetime import date
 from urllib.parse import urlparse
 
 from .. import db, fetch, llm
-from ..config import EVENT_PAGES, MODEL_FAST, today
+from ..config import EVENT_PAGES, MODEL_FAST, RENDERED_EVENT_PAGES, today
 from ..schemas import LLMEventList
 
 # WordPress event feeds inside the Blue Science Park ecosystem (structured, public).
@@ -28,8 +28,8 @@ never move an event into the future. If no date is stated, return an empty strin
 details; use "unknown" or empty strings when the page does not say."""
 
 
-def _listing_text(html: str, base: str) -> str:
-    text = fetch.extract_text(html, base)[:9000]
+def _listing_text(html: str, base: str, rendered_text: str | None = None) -> str:
+    text = (rendered_text or fetch.extract_text(html, base))[:9000]
     host = urlparse(base).netloc
     links = [f"- {a} -> {u}" for u, a in fetch.links(html, base) if urlparse(u).netloc == host and len(a) > 12][:80]
     return text + "\n\nLINKS ON THE PAGE (anchor -> url):\n" + "\n".join(links)
@@ -84,14 +84,15 @@ def collect_events() -> int:
         except (fetch.FetchError, RuntimeError, ValueError, KeyError) as e:
             db.log(f"collect:events:{source}", "error", str(e))
 
-    for page_url in EVENT_PAGES:
-        source = urlparse(page_url).netloc.replace("www.", "").split(".")[0]
+    pages = [(urlparse(u).netloc.replace("www.", "").split(".")[0], u, False) for u in EVENT_PAGES]
+    pages += [(src, u, True) for src, u in RENDERED_EVENT_PAGES]
+    for source, page_url, rendered in pages:
         try:
-            page = fetch.get(page_url, use_cache=False)
+            page = fetch.render(page_url, use_cache=False) if rendered else fetch.get(page_url, use_cache=False)
         except fetch.FetchError as e:
             db.log(f"collect:events:{source}", "error", str(e))
             continue
-        text = _listing_text(page["html"], page["final_url"])
+        text = _listing_text(page["html"], page["final_url"], page.get("text"))
         if llm.injection_score(text) > 0.9:
             db.log(f"collect:events:{source}", "flagged", "possible prompt injection in listing; skipped")
             continue

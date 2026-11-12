@@ -17,7 +17,8 @@ STAFF_CONTACT = "https://www.bluesciencepark.se/kontakt/kontaktpersoner/"
 SOURCE_NAMES = {
     "vinnova": "Vinnova (Swedish innovation agency)", "eu": "EU Funding & Tenders Portal (European Commission)",
     "mtc": "Marine Technology Center of Sweden", "bsp": "Blue Science Park", "techconceptlab": "Tech Concept Lab",
-    "almi": "Almi Blekinge", "netport": "NetPort",
+    "almi": "Almi Blekinge", "netport": "NetPort", "vinnova_events": "Vinnova (event)", "bth": "Blekinge Institute of Technology",
+    "aisweden": "AI Sweden", "regionblekinge": "Region Blekinge", "sisp": "Swedish Incubators & Science Parks",
 }
 
 SYSTEM = f"""You are Radar's Concierge for Blue Science Park (Karlskrona, Sweden), talking to a representative of ONE member company.
@@ -62,7 +63,7 @@ def _context(slug: str) -> tuple[str, dict]:
     refs: dict[str, dict] = {}
     lines = [f"YOUR COMPANY: {comp['name']}", f"Summary: {profile['summary']}"]
     for c in profile["claims"]:
-        if c.get("review") == "rejected":
+        if c.get("review") in ("rejected", "outdated"):
             continue
         tag = "company-confirmed" if (c.get("origin") == "user" or c.get("review") == "confirmed") else c["status"]
         lines.append(f"- ({tag}, {c['section']}) {c['statement']}")

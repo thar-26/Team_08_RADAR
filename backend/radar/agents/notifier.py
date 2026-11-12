@@ -265,5 +265,6 @@ def _send(to: str, subject: str, html_body: str, text_body: str) -> None:
     host, port = os.getenv("SMTP_HOST", ""), int(os.getenv("SMTP_PORT", "587"))
     with smtplib.SMTP(host, port, timeout=20) as s:
         s.starttls(context=ssl.create_default_context())
-        s.login(os.getenv("SMTP_USER", ""), os.getenv("SMTP_PASSWORD", ""))
+        # App passwords are shown with spaces ("abcd efgh ..."); they are not part of it.
+        s.login(os.getenv("SMTP_USER", "").strip(), os.getenv("SMTP_PASSWORD", "").replace(" ", ""))
         s.send_message(msg)

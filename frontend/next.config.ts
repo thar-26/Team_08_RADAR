@@ -1,7 +1,13 @@
+import { loadEnvConfig } from "@next/env";
+import path from "node:path";
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-};
+// One .env for the whole project: load the secrets from the repository root
+// (login keys and AUTH_SECRET are shared with the Python API).
+// forceReload: Next has already loaded env for frontend/ once and would
+// otherwise return that cached result and ignore the root .env.
+loadEnvConfig(path.resolve(process.cwd(), ".."), process.env.NODE_ENV !== "production", console, true);
+
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

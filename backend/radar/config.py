@@ -44,6 +44,16 @@ EXTRA_SEED_URLS: dict[str, list[str]] = {
     ],
 }
 
+# Calendars that only build their lists in the browser: read with a headless
+# browser (robots.txt checked for each). (source id, url)
+RENDERED_EVENT_PAGES = [
+    ("vinnova_events", "https://www.vinnova.se/kalender/"),
+    ("bth", "https://www.bth.se/evenemang/"),
+    ("aisweden", "https://www.ai.se/en/events"),
+    ("regionblekinge", "https://regionblekinge.se/"),
+    ("sisp", "https://www.sisp.se/"),
+]
+
 EVENT_PAGES = [
     "https://www.almi.se/blekinge/evenemang/",
     "https://www.netport.se/evenemang/",

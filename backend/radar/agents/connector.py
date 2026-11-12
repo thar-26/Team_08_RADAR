@@ -38,7 +38,7 @@ def public_text(slug: str) -> str:
     comp = db.one("SELECT profile FROM companies WHERE slug=?", (slug,))
     prof = db.loads(comp and comp["profile"])
     if prof:
-        facts = [c["statement"] for c in prof["claims"] if c["status"] == "fact" and c.get("origin") != "user" and c.get("review") != "rejected"]
+        facts = [c["statement"] for c in prof["claims"] if c["status"] == "fact" and c.get("origin") != "user" and c.get("review") not in ("rejected", "outdated")]
         text += "\nVerified public facts: " + "; ".join(facts[:14])
     return text
 

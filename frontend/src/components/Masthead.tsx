@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import AuthMenu from "@/components/AuthMenu";
 import { useI18n, type Key } from "@/lib/i18n";
 
 const LINKS: { href: string; key: Key }[] = [
@@ -32,6 +33,7 @@ export default function Masthead() {
         <Link href="/" className="brand" aria-label="Radar">
           <Mark />
           <span className="brand-word" translate="no">Radar</span>
+          <span className="brand-sub">{t("brand.sub")}</span>
         </Link>
         <nav className="nav" aria-label="Main">
           {LINKS.map((l) => {
@@ -43,6 +45,7 @@ export default function Masthead() {
             );
           })}
         </nav>
+        <AuthMenu />
         <div className="langswitch" role="group" aria-label="Språk / Language">
           <button aria-pressed={lang === "sv"} onClick={() => setLang("sv")} lang="sv">SV</button>
           <button aria-pressed={lang === "en"} onClick={() => setLang("en")} lang="en">EN</button>

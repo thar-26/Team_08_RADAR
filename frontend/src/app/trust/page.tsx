@@ -13,16 +13,17 @@ type Report = {
   injection: { page_injection_score: number; flagged: boolean; profile_followed_injection: boolean };
 };
 type TrustResp = { report: Report | null; injection_demo: { page: { url: string; text: string; injection_score: number } | null; profile: Profile | null } };
-const PRESETS: Key[] = ["trust.p1", "trust.p2", "trust.p3", "trust.p4", "trust.p5", "trust.p6"];
+const PRESETS: Key[] = ["trust.p1", "trust.p2", "trust.p3", "trust.p4"];
 
-export default function Trust() {
+/** What the brief asks for — a quality and boundary check — in plain language:
+ *  four results first, a box to test it yourself, and the full tables on request. */
+export default function Quality() {
   const { t, lang } = useI18n();
   const { data, error, loading } = useFetch(() => api<TrustResp>("/api/trust"));
   const [msg, setMsg] = useState("");
   const [res, setRes] = useState<GuardResult | null>(null);
   const [busy, setBusy] = useState(false);
   const r = data?.report;
-  const g = (c: string) => t(`guard.${c}` as Key);
 
   async function run(m: string) {
     setMsg(m);
@@ -34,143 +35,126 @@ export default function Trust() {
       setBusy(false);
     }
   }
+
+  const profiles = r ? Object.values(r.profiles) : [];
+  const facts = profiles.reduce((a, p) => a + p.facts, 0);
+  const verified = profiles.reduce((a, p) => a + p.facts_with_verified_quote, 0);
+  const [linked, totalLinked] = (r?.recommendations.feed_items_with_link_and_date ?? "0/0").split("/").map(Number);
+  const results: [string, string][] = r ? [
+    [`${verified}/${facts}`, t("q.r1")],
+    [`${Math.round((1 - r.recommendations.mean_overlap) * 100)}%`, t("q.r2")],
+    [`${totalLinked ? Math.round((linked / totalLinked) * 100) : 100}%`, t("q.r3")],
+    [`${r.boundaries.exact}/${r.boundaries.total}`, t("q.r4")],
+  ] : [];
   const page = data?.injection_demo.page;
-  const [before, hidden, after] = page ? splitHidden(page.text) : ["", "", ""];
+  const hidden = page ? page.text.slice(page.text.indexOf("<!--"), page.text.indexOf("-->") + 3) : "";
 
   return (
     <>
       <section className="pagehead pagehead-pad">
         <div className="shell">
-          
-          <h1>{t("trust.title")}</h1>
-          <p className="lead">{t("trust.lede")}</p>
+          <h1>{t("q.title")}</h1>
+          <p className="lead">{t("q.lede")}</p>
         </div>
       </section>
 
-      <section className="shell" style={{ marginTop: 24 }}>
-        <div className="panel">
-          <form className="row" onSubmit={(e) => { e.preventDefault(); if (msg.trim()) run(msg); }}>
-            <input className="input" style={{ flex: 1, minWidth: 240 }} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={t("trust.placeholder")} aria-label={t("trust.placeholder")} />
-            <button className="btn" disabled={busy || !msg.trim()}>{busy ? t("trust.running") : t("trust.run")}</button>
+      {error && <div className="section"><div className="shell"><ErrorNote error={error} /></div></div>}
+      {loading && <div className="section"><div className="shell"><Skeleton h={200} /></div></div>}
+
+      {r && (
+        <section className="section tight">
+          <div className="shell">
+          <div className="figures q-figures">
+            {results.map(([n, label]) => (
+              <div key={label} className="figure" data-reveal>
+                <b>{n}</b>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="note" style={{ marginTop: 16 }}>{t("q.measured", { date: fmtDate(r.generated_at, lang) })}</p>
+          </div>
+        </section>
+      )}
+
+      <section className="section field-step">
+        <div className="shell" style={{ maxWidth: 900 }}>
+          <h2>{t("q.tryTitle")}</h2>
+          <p className="lead" style={{ marginTop: 14 }}>{t("q.tryLede")}</p>
+          <form className="row" style={{ marginTop: 24, gap: 0, flexWrap: "nowrap" }} onSubmit={(e) => { e.preventDefault(); if (msg.trim()) run(msg); }}>
+            <input className="input" name="message" autoComplete="off" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={t("trust.placeholder")} aria-label={t("trust.placeholder")} />
+            <button className="btn" disabled={busy || !msg.trim()}>{busy ? t("trust.running") : t("q.try")}</button>
           </form>
           <div className="row" style={{ marginTop: 12, gap: 6 }}>
-            {PRESETS.map((k) => <button key={k} className="btn quiet small" onClick={() => run(t(k))}>{t(k)}</button>)}
+            {PRESETS.map((k) => <button key={k} className="btn quiet small" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }} onClick={() => run(t(k))}>{t(k)}</button>)}
           </div>
-          {(res || busy) && (
-            <div className="grid" style={{ marginTop: 20, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-              <Layer title={t("trust.l1")} sub="Llama Prompt Guard 2" value={res ? `${(res.layers[0].score! * 100).toFixed(1)}%` : "…"} flag={!!res?.layers[0].flag} note={t("trust.l1note")} />
-              <Layer title={t("trust.l2")} sub={t("trust.l2sub")} value={res ? (res.layers[1].category ? g(res.layers[1].category) : t("trust.noMatch")) : "…"} flag={!!res?.layers[1].flag} note={t("trust.l2note")} />
-              <Layer title={t("trust.l3")} sub="gpt-oss-20b" value={res ? g(res.layers[2].category ?? "relevant") : "…"} flag={!!res && res.layers[2].category !== "relevant"} note={res?.layers[2].reason ?? ""} />
-              <Layer title={t("trust.verdict")} sub={t("trust.strictest")} value={res ? g(res.category) : "…"} flag={!!res && res.category !== "relevant"} strong
-                note={res?.clarifying_question || (res?.category === "relevant" ? t("trust.answerOk") : t("trust.answerSafe"))} />
+
+          {res && (
+            <div className="panel" style={{ marginTop: 20, background: res.category === "relevant" ? "var(--ok-soft)" : "var(--white)" }} role="status">
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>{t(`q.v.${res.category}` as Key)}</p>
+              {res.clarifying_question && <p style={{ margin: "8px 0 0" }}>“{res.clarifying_question}”</p>}
+              <details style={{ marginTop: 14 }}>
+                <summary className="textbtn">{t("q.how")}</summary>
+                <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 15 }}>
+                  <li>{t("q.l1", { n: (res.layers[0].score! * 100).toFixed(1) })}</li>
+                  <li>{res.layers[1].category ? t("q.l2hit", { what: t(`guard.${res.layers[1].category}` as Key) }) : t("q.l2none")}</li>
+                  <li>{t("q.l3", { what: t(`guard.${res.layers[2].category ?? "relevant"}` as Key) })} {res.layers[2].reason}</li>
+                </ul>
+              </details>
             </div>
           )}
         </div>
       </section>
 
-      <section className="shell section">
-        {error && <ErrorNote error={error} />}
-        {loading && <Skeleton h={240} />}
-        {r && (
-          <>
-            <div className="spread" style={{ marginBottom: 24, alignItems: "flex-end" }}>
-              <h2>{t("trust.suite")}</h2>
-              <span className={`tag ${r.boundaries.no_unsafe_answers ? "ok" : "danger"}`}>
-                {t("trust.suiteMeta", { a: r.boundaries.exact, b: r.boundaries.total, safe: r.boundaries.no_unsafe_answers ? t("trust.noUnsafe") : t("trust.unsafe"), date: fmtDate(r.generated_at, lang) })}
-              </span>
+      {r && (
+        <section className="section">
+          <div className="shell" style={{ maxWidth: 900 }}>
+            <h2>{t("q.webTitle")}</h2>
+            <p className="lead" style={{ marginTop: 14 }}>{t("q.webLede")}</p>
+            <div className="row" style={{ marginTop: 18 }}>
+              <span className="tag danger">{t("q.webFlag", { n: (r.injection.page_injection_score * 100).toFixed(0) })}</span>
+              <span className={`tag ${r.injection.profile_followed_injection ? "danger" : "ok"}`}>{r.injection.profile_followed_injection ? t("trust.injFollowed") : t("trust.injIgnored")}</span>
             </div>
-            <div className="table-wrap">
-              <table className="table">
-                <thead><tr><th>{t("trust.thMsg")}</th><th>{t("trust.thExp")}</th><th>{t("trust.thGot")}</th><th></th></tr></thead>
-                <tbody>
-                  {r.boundaries.cases.map((c) => (
-                    <tr key={c.message}>
-                      <td>{c.message}</td><td>{g(c.expected)}</td><td>{g(c.got)}</td>
-                      <td>{c.pass ? <span className="tag ok">{t("trust.pass")}</span> : <span className="tag danger">{t("trust.miss")}</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {hidden && (
+              <details style={{ marginTop: 16 }}>
+                <summary className="textbtn">{t("q.webShow")}</summary>
+                <pre className="panel" style={{ whiteSpace: "pre-wrap", fontSize: 14, margin: "10px 0 0" }}><span className="hl">{hidden}</span></pre>
+              </details>
+            )}
 
-            <div className="two-col" style={{ marginTop: 48 }}>
-              <div>
-                <div className="spread" style={{ marginBottom: 24, alignItems: "flex-end" }}><h2>{t("trust.injTitle")}</h2><span className="tag warn">{t("trust.simCo")}</span></div>
-                <p className="note" style={{ marginTop: -6 }}>{t("trust.injLede")}</p>
-                <pre className="panel" style={{ padding: 18, whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6, fontFamily: "var(--font-mono), monospace", overflowX: "auto" }}>
-                  {before}<span className="hl">{hidden}</span>{after}
-                </pre>
-                <div className="row">
-                  <span className="tag danger">{t("trust.injScore", { n: (r.injection.page_injection_score * 100).toFixed(1) })}</span>
-                  <span className={`tag ${r.injection.profile_followed_injection ? "danger" : "ok"}`}>{r.injection.profile_followed_injection ? t("trust.injFollowed") : t("trust.injIgnored")}</span>
-                </div>
+            <details style={{ marginTop: 48 }}>
+              <summary><h2 style={{ display: "inline", fontSize: 24 }}>{t("q.details")}</h2></summary>
+              <h3 style={{ marginTop: 28 }}>{t("trust.suite")}</h3>
+              <div className="table-wrap" style={{ marginTop: 10 }}>
+                <table className="table">
+                  <thead><tr><th>{t("trust.thMsg")}</th><th>{t("trust.thExp")}</th><th>{t("trust.thGot")}</th></tr></thead>
+                  <tbody>
+                    {r.boundaries.cases.map((c) => (
+                      <tr key={c.message}>
+                        <td>{c.message}</td>
+                        <td>{t(`guard.${c.expected}` as Key)}</td>
+                        <td>{c.pass ? <span className="tag ok">{t(`guard.${c.got}` as Key)}</span> : <span className="tag danger">{t(`guard.${c.got}` as Key)}</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div>
-                <div className="spread" style={{ marginBottom: 24, alignItems: "flex-end" }}><h2>{t("trust.wrote")}</h2></div>
-                <div className="claims">
-                  {(data?.injection_demo.profile?.claims ?? []).slice(0, 9).map((c) => (
-                    <div key={c.id} className="claim" style={{ gridTemplateColumns: "14px 1fr" }}>
-                      <span className={`dot ${c.status === "fact" ? "fact" : "inferred"}`} /><div>{c.statement}</div>
-                    </div>
-                  ))}
-                </div>
-                <p className="note">{t("trust.wroteNote")}</p>
+              <h3 style={{ marginTop: 32 }}>{t("trust.acc")}</h3>
+              <div className="table-wrap" style={{ marginTop: 10 }}>
+                <table className="table">
+                  <thead><tr><th>{t("trust.thMember")}</th><th>{t("trust.thFacts")}</th><th>{t("trust.thVerified")}</th><th>{t("trust.thDown")}</th><th>{t("trust.thTraced")}</th></tr></thead>
+                  <tbody>
+                    {profiles.map((p) => (
+                      <tr key={p.name}><td>{p.name}</td><td className="num">{p.facts}</td><td className="num">{p.facts_with_verified_quote}/{p.facts}</td><td className="num">{p.downgraded_by_verifier}</td><td className="num">{p.claims_with_source_and_date}/{p.claims}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            <div className="spread" style={{ marginBottom: 24, marginTop: 64, alignItems: "flex-end" }}>
-              <h2>{t("trust.acc")}</h2>
-              <span className="note">{t("trust.accMeta", { n: r.recommendations.feed_items_with_link_and_date })}</span>
-            </div>
-            <div className="table-wrap">
-              <table className="table">
-                <thead><tr>
-                  <th>{t("trust.thMember")}</th><th>{t("trust.thStatements")}</th><th>{t("trust.thFacts")}</th><th>{t("trust.thVerified")}</th>
-                  <th>{t("trust.thDown")}</th><th>{t("trust.thTraced")}</th><th>{t("trust.thInterests")}</th><th>{t("trust.thSources")}</th>
-                </tr></thead>
-                <tbody>
-                  {Object.entries(r.profiles).map(([s, p]) => (
-                    <tr key={s}>
-                      <td><b style={{ fontWeight: 600 }}>{p.name}</b></td><td>{p.claims}</td><td>{p.facts}</td>
-                      <td>{p.facts_with_verified_quote}/{p.facts}</td><td>{p.downgraded_by_verifier}</td>
-                      <td>{p.claims_with_source_and_date}/{p.claims}</td>
-                      <td>{p.interests_never_marked_fact ? <span className="tag ok">{t("trust.yes")}</span> : <span className="tag danger">{t("trust.no")}</span>}</td>
-                      <td>{p.sources}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="spread" style={{ marginBottom: 24, marginTop: 64, alignItems: "flex-end" }}>
-              <h2>{t("trust.personal")}</h2>
-              <span className="tag brand">{t("trust.overlap", { n: (r.recommendations.mean_overlap * 100).toFixed(0) })}</span>
-            </div>
-            <p className="note" style={{ marginTop: -6 }}>{t("trust.personalNote", { n: r.recommendations.sme_only_calls_in_large_company_top10.length })}</p>
-            <div className="row" style={{ gap: 8 }}>
-              {r.recommendations.pairwise_overlap.map((p) => <span key={p.a + p.b} className="tag">{p.a} × {p.b}: {(p.top10_overlap * 100).toFixed(0)}%</span>)}
-            </div>
-          </>
-        )}
-      </section>
+              <p className="note" style={{ marginTop: 16 }}>{t("trust.personalNote", { n: r.recommendations.sme_only_calls_in_large_company_top10.length })}</p>
+            </details>
+          </div>
+        </section>
+      )}
     </>
   );
-}
-
-function Layer({ title, sub, value, flag, note, strong }: { title: string; sub: string; value: string; flag: boolean; note: string; strong?: boolean }) {
-  return (
-    <div className="panel" style={{ padding: 16, background: strong ? (flag ? "var(--danger-soft)" : "var(--ok-soft)") : "var(--step)", border: 0 }}>
-      <div className="panel-title" style={{ marginBottom: 0 }}>{title}</div>
-      <div className="note">{sub}</div>
-      <div style={{ fontWeight: 900, fontSize: 24, letterSpacing: "-0.03em", marginTop: 10, color: flag ? "var(--danger)" : "var(--ok)" }}>{value}</div>
-      <div className="note" style={{ marginTop: 4 }}>{note}</div>
-    </div>
-  );
-}
-
-function splitHidden(text: string): [string, string, string] {
-  const s = text.indexOf("<!--");
-  const e = text.indexOf("-->");
-  if (s < 0 || e < 0) return [text, "", ""];
-  return [text.slice(0, s), text.slice(s, e + 3), text.slice(e + 3)];
 }

@@ -4,15 +4,17 @@ Run:  uvicorn radar.api:app --reload --port 8000   (from backend/)"""
 from __future__ import annotations
 
 import json
+import threading
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import db
+from . import auth, db
+from .auth import current_user
 from .agents import concierge, connector, matcher, notifier, profiler
 from .api_support import apply_edit
 from .config import DATA, DEMO_COMPANIES, now_iso, today
@@ -35,6 +37,11 @@ SOURCE_INFO = {
     "almi": {"name": "Almi Blekinge events", "url": "https://www.almi.se/blekinge/evenemang/"},
     "netport": {"name": "NetPort events", "url": "https://www.netport.se/evenemang/"},
     "mtc": {"name": "Marine Technology Center of Sweden – testbeds", "url": "https://www.mtcos.se/"},
+    "vinnova_events": {"name": "Vinnova calendar", "url": "https://www.vinnova.se/kalender/"},
+    "bth": {"name": "Blekinge Institute of Technology events", "url": "https://www.bth.se/evenemang/"},
+    "aisweden": {"name": "AI Sweden events", "url": "https://www.ai.se/en/events"},
+    "regionblekinge": {"name": "Region Blekinge", "url": "https://regionblekinge.se/"},
+    "sisp": {"name": "Swedish Incubators & Science Parks", "url": "https://www.sisp.se/"},
 }
 
 
@@ -68,6 +75,11 @@ CONTACT_LINKS = {
     "techconceptlab": [{"label": "organiser", "url": "https://techconceptlab.com/"}],
     "almi": [{"label": "organiser", "url": "https://www.almi.se/blekinge/"}],
     "netport": [{"label": "organiser", "url": "https://www.netport.se/"}],
+    "vinnova_events": [{"label": "organiser", "url": "https://www.vinnova.se/kalender/"}],
+    "bth": [{"label": "organiser", "url": "https://www.bth.se/evenemang/"}],
+    "aisweden": [{"label": "organiser", "url": "https://www.ai.se/en/events"}],
+    "regionblekinge": [{"label": "organiser", "url": "https://regionblekinge.se/"}],
+    "sisp": [{"label": "organiser", "url": "https://www.sisp.se/"}],
 }
 
 
@@ -112,7 +124,7 @@ def _loc_profile(p: dict, tc: Collector) -> None:
     for k in ("summary", "size_basis"):
         tc.add(p, k)
     for c in p.get("claims", []):
-        if c.get("origin") == "user":
+        if c.get("origin") == "user" or c.get("note") == "registry":  # own words / official register text
             continue  # the company's own words stay as written
         tc.add(c, "statement")
         tc.add(c, "reasoning")
@@ -162,7 +174,7 @@ def companies():
 
 
 @app.get("/api/companies/{slug}")
-def company(slug: str, lang: str = "sv"):
+def company(slug: str, lang: str = "sv", user: dict | None = Depends(current_user)):
     c = _company(slug)
     if not c["profile"]:
         raise HTTPException(409, "This member has not been profiled yet")
@@ -179,7 +191,9 @@ def _localised_profile(p: dict, lang: str) -> dict:
 
 
 @app.post("/api/companies/{slug}/build")
-def build(slug: str):
+def build(slug: str, user: dict | None = Depends(current_user)):
+    if auth.login_required() and not (user and user['staff']):
+        raise HTTPException(403, 'Only Blue Science Park staff can profile new members')
     """Profile any member on demand: crawl its public pages, profile, verify, rank."""
     from .collectors import websites
 
@@ -215,20 +229,32 @@ class Edit(BaseModel):
     lang: str | None = None
 
 
+def _audit(slug: str, version: int, user: dict | None, action: str, claim_id: str | None) -> None:
+    """Who changed which company profile, and when (kept server-side; emails are not shown publicly)."""
+    db.execute("CREATE TABLE IF NOT EXISTS profile_audit (slug TEXT, version INTEGER, email TEXT, name TEXT, action TEXT, claim_id TEXT, at TEXT)")
+    db.execute("INSERT INTO profile_audit (slug, version, email, name, action, claim_id, at) VALUES (?,?,?,?,?,?,?)",
+               (slug, version, (user or {}).get("email", ""), (user or {}).get("name", ""), action, claim_id or "", now_iso()))
+
+
 @app.post("/api/companies/{slug}/profile")
-def edit_profile(slug: str, e: Edit):
+def edit_profile(slug: str, e: Edit, user: dict | None = Depends(current_user)):
+    auth.require_edit(user, slug)  # only the company's own members (or staff) may edit
     c = _company(slug)
     try:
-        new, note = apply_edit(c["profile"], e.action, e.claim_id, e.model_dump(exclude_none=True))
+        new, note = apply_edit(c["profile"], e.action, e.claim_id, e.model_dump(exclude_none=True), editor=user)
     except (ValueError, KeyError) as err:
         raise HTTPException(400, str(err)) from err
     version = profiler.save_profile(slug, new, author="user", note=note)
+    _audit(slug, version, user, e.action, e.claim_id)
+    # Refresh this company's recommendations from the corrected profile: the ranking
+    # is recomputed on every request; the written explanations are regenerated in the background.
+    threading.Thread(target=matcher.refresh_matches, args=(slug,), daemon=True).start()
     lang = _lang(e.lang)
-    return {"version": version, "note": note, "profile": _localised_profile(new, lang), "feed": feed(slug, lang=lang)}
+    return {"version": version, "note": note, "profile": _localised_profile(new, lang), "feed": feed(slug, lang=lang, user=user)}
 
 
 @app.get("/api/companies/{slug}/timeline")
-def timeline(slug: str):
+def timeline(slug: str, user: dict | None = Depends(current_user)):
     versions = db.rows("SELECT version, author, note, created_at, profile FROM profile_versions WHERE slug=? ORDER BY version", (slug,))
     out, prev = [], None
     for v in versions:
@@ -242,7 +268,7 @@ def timeline(slug: str):
 
 
 @app.get("/api/companies/{slug}/feed")
-def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv"):
+def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv", user: dict | None = Depends(current_user)):
     _company(slug)
     lang = _lang(lang)
     ranked = matcher.rank(slug)
@@ -286,7 +312,7 @@ def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv"):
 
 
 @app.post("/api/companies/{slug}/explain/{opp_id:path}")
-def explain(slug: str, opp_id: str, lang: str = "sv"):
+def explain(slug: str, opp_id: str, lang: str = "sv", user: dict | None = Depends(current_user)):
     _company(slug)
     if not db.one("SELECT 1 FROM opportunities WHERE id=?", (opp_id,)):
         raise HTTPException(404, "Unknown opportunity")
@@ -308,7 +334,7 @@ class Feedback(BaseModel):
 
 
 @app.post("/api/companies/{slug}/feedback")
-def feedback(slug: str, f: Feedback):
+def feedback(slug: str, f: Feedback, user: dict | None = Depends(current_user)):
     _company(slug)
     if f.value not in ("up", "down", "saved"):
         raise HTTPException(400, "value must be up, down or saved")
@@ -322,13 +348,13 @@ def feedback(slug: str, f: Feedback):
 
 
 @app.get("/api/companies/{slug}/saved")
-def saved(slug: str):
+def saved(slug: str, user: dict | None = Depends(current_user)):
     ids = [r["opp_id"] for r in db.rows("SELECT opp_id FROM feedback WHERE company_slug=? AND value='saved' ORDER BY created_at DESC", (slug,))]
     return [_opp_public(db.one("SELECT * FROM opportunities WHERE id=?", (i,))) for i in ids if db.one("SELECT 1 FROM opportunities WHERE id=?", (i,))]
 
 
 @app.get("/api/companies/{slug}/connections")
-def connections(slug: str, lang: str = "sv"):
+def connections(slug: str, lang: str = "sv", user: dict | None = Depends(current_user)):
     _company(slug)
     out = connector.suggest(slug)
     tc = Collector(_lang(lang))
@@ -348,7 +374,7 @@ class ChatIn(BaseModel):
 
 
 @app.post("/api/companies/{slug}/chat")
-def chat(slug: str, m: ChatIn):
+def chat(slug: str, m: ChatIn, user: dict | None = Depends(current_user)):
     c = _company(slug)
     if not c["profile"]:
         raise HTTPException(409, "Profile not ready")
@@ -365,6 +391,42 @@ def chat(slug: str, m: ChatIn):
     return out
 
 
+# ---------------------------------------------------------------- Bolagsverket
+class RegistryIn(BaseModel):
+    orgnr: str
+
+
+@app.get("/api/companies/{slug}/registry")
+def registry_get(slug: str, user: dict | None = Depends(current_user)):
+    from .collectors import bolagsverket
+
+    _company(slug)
+    return {"configured": bolagsverket.configured(), "registry": bolagsverket.get(slug)}
+
+
+@app.post("/api/companies/{slug}/registry")
+def registry_set(slug: str, r: RegistryIn, user: dict | None = Depends(current_user)):
+    auth.require_edit(user, slug)  # only the company's own members (or staff) may edit
+    """Look up the member's organisation number at Bolagsverket and, if the
+    official name matches the member, add the official facts to the profile."""
+    from .collectors import bolagsverket
+
+    c = _company(slug)
+    if not bolagsverket.configured():
+        raise HTTPException(503, "Bolagsverket is not configured (add the keys to .env)")
+    try:
+        result = bolagsverket.register(slug, r.orgnr)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except bolagsverket.RegistryError as e:
+        raise HTTPException(404 if "not found" in str(e).lower() else 502, str(e)) from e
+    if result["status"] == "verified" and c["profile"]:
+        p = c["profile"]
+        p["claims"] = [x for x in p["claims"] if x.get("note") != "registry"] + bolagsverket.as_claims(slug)
+        profiler.save_profile(slug, p, author="agent", note="Official facts from Bolagsverket")
+    return result | {"registry": bolagsverket.get(slug)}
+
+
 # ---------------------------------------------------------------- email alerts
 class AlertsIn(BaseModel):
     email: str
@@ -375,7 +437,7 @@ class AlertsIn(BaseModel):
 
 
 @app.get("/api/companies/{slug}/alerts")
-def alerts_status(slug: str):
+def alerts_status(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
     notifier.init()
     sub = db.one("SELECT email, kinds, min_relevance, lang, consent_at, active FROM subscriptions WHERE company_slug=?", (slug,))
@@ -389,7 +451,7 @@ def alerts_status(slug: str):
 
 
 @app.post("/api/companies/{slug}/alerts")
-def alerts_subscribe(slug: str, a: AlertsIn):
+def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current_user)):
     _company(slug)
     if not a.consent:
         raise HTTPException(400, "Consent is required to receive emails")
@@ -398,21 +460,21 @@ def alerts_subscribe(slug: str, a: AlertsIn):
         result = notifier.subscribe(slug, a.email, a.kinds, a.min_relevance, a.lang)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    return result | alerts_status(slug)
+    return result | alerts_status(slug, user=user)
 
 
 @app.post("/api/companies/{slug}/alerts/check")
-def alerts_check(slug: str):
+def alerts_check(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
-    return notifier.run(slug) | alerts_status(slug)
+    return notifier.run(slug) | alerts_status(slug, user=user)
 
 
 @app.delete("/api/companies/{slug}/alerts")
-def alerts_delete(slug: str):
+def alerts_delete(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
     notifier.init()
     db.execute("UPDATE subscriptions SET active=0 WHERE company_slug=?", (slug,))
-    return alerts_status(slug)
+    return alerts_status(slug, user=user)
 
 
 class Unsub(BaseModel):
@@ -425,22 +487,23 @@ def alerts_unsubscribe(u: Unsub):
 
 
 @app.get("/api/outbox/{msg_id}", response_class=Response)
-def outbox_html(msg_id: int):
+def outbox_html(msg_id: int, user: dict | None = Depends(current_user)):
     notifier.init()
-    m = db.one("SELECT html FROM outbox WHERE id=?", (msg_id,))
+    m = db.one("SELECT html, company_slug FROM outbox WHERE id=?", (msg_id,))
     if not m:
         raise HTTPException(404)
+    # Company pages are open in the prototype; editing is what requires sign-in.
     return Response(m["html"], media_type="text/html")
 
 
 @app.get("/api/companies/{slug}/chat")
-def chat_history(slug: str):
+def chat_history(slug: str, user: dict | None = Depends(current_user)):
     # Only this company's own conversation is ever returned.
     return db.rows("SELECT role, content, verdict, created_at FROM chat_log WHERE company_slug=? ORDER BY id", (slug,))
 
 
 @app.delete("/api/companies/{slug}/chat")
-def chat_clear(slug: str):
+def chat_clear(slug: str, user: dict | None = Depends(current_user)):
     db.execute("DELETE FROM chat_log WHERE company_slug=?", (slug,))
     return {"ok": True}
 
@@ -519,3 +582,46 @@ def trust_guard(m: GuardIn):
 @app.get("/api/demo-companies")
 def demo_companies():
     return DEMO_COMPANIES
+
+
+# ---------------------------------------------------------------- accounts
+@app.get("/api/me")
+def me(user: dict | None = Depends(current_user)):
+    if not user:
+        return {"user": None, "login_required": auth.login_required()}
+    return {"user": user, "login_required": auth.login_required(), "memberships": auth.memberships(user["email"]),
+            "suggestions": auth.suggestions(user["email"])}
+
+
+class AccessIn(BaseModel):
+    slug: str
+
+
+@app.post("/api/me/request")
+def me_request(a: AccessIn, user: dict | None = Depends(current_user)):
+    if not user:
+        raise HTTPException(401, "Sign in")
+    return auth.request_access(user, a.slug)
+
+
+@app.get("/api/admin/requests")
+def admin_requests(user: dict | None = Depends(current_user)):
+    if not (user and user["staff"]):
+        raise HTTPException(403, "Staff only")
+    auth.init()
+    return db.rows("SELECT m.email, m.slug, m.status, m.via, m.created_at, c.name FROM memberships m JOIN companies c ON c.slug=m.slug "
+                   "ORDER BY CASE m.status WHEN 'pending' THEN 0 ELSE 1 END, m.created_at DESC LIMIT 200")
+
+
+class DecideIn(BaseModel):
+    email: str
+    slug: str
+    approve: bool
+
+
+@app.post("/api/admin/requests/decide")
+def admin_decide(d: DecideIn, user: dict | None = Depends(current_user)):
+    if not (user and user["staff"]):
+        raise HTTPException(403, "Staff only")
+    auth.decide(user, d.email, d.slug, d.approve)
+    return {"ok": True}
