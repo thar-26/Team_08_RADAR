@@ -58,16 +58,16 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
   if (!data) return <div style={{ marginTop: 22 }}><Skeleton h={260} /></div>;
 
   return (
-    <div className="two-col" style={{ marginTop: 22, gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr)" }}>
-      <div className="card pad">
+    <div className="split" style={{ paddingTop: 48, gap: 48 }}>
+      <div className="panel">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2 style={{ fontSize: 21 }}>🔔 {t("al.title")}</h2>
-          <span className={`pill ${active ? "ok" : ""}`}>{active ? t("al.active", { email: sub!.email }) : t("al.inactive")}</span>
+          <h3>{t("al.title")}</h3>
+          <span className={`tag ${active ? "ok" : ""}`}>{active ? t("al.active", { email: sub!.email }) : t("al.inactive")}</span>
         </div>
-        <p className="muted" style={{ fontSize: 14, margin: "10px 0 18px" }}>{t("al.lede")}</p>
+        <p style={{ fontSize: 16, margin: "10px 0 20px" }}>{t("al.lede")}</p>
 
         <label className="field" htmlFor="al-email">{t("al.email")}</label>
-        <input id="al-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="namn@foretag.se" />
+        <input id="al-email" name="email" className="input" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="namn@foretag.se" />
 
         <div style={{ marginTop: 14 }}>
           <span className="field">{t("al.kinds")}</span>
@@ -108,43 +108,43 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
           </button>
           {active && (
             <>
-              <button className="btn soft" disabled={busy}
+              <button className="btn navy" disabled={busy}
                 onClick={() => call(`/api/companies/${slug}/alerts/check`, { method: "POST" }, (d) => toast(d.new ? t("al.newFound", { n: d.new }) : t("al.none")))}>
                 {t("al.check")}
               </button>
               <button className="btn danger" disabled={busy}
-                onClick={() => call(`/api/companies/${slug}/alerts`, { method: "DELETE" }, () => toast(t("al.unsubscribed")))}>
+                onClick={() => confirm(t("al.confirmStop")) && call(`/api/companies/${slug}/alerts`, { method: "DELETE" }, () => toast(t("al.unsubscribed")))}>
                 {t("al.stop")}
               </button>
             </>
           )}
         </div>
-        {active && <p className="muted small" style={{ marginTop: 12 }}>{t("al.tip")}</p>}
+        {active && <p className="note" style={{ marginTop: 14 }}>{t("al.tip")}</p>}
         <div className={`banner ${data.smtp_configured ? "info" : ""}`} style={{ marginTop: 16 }}>
           {data.smtp_configured ? t("al.smtpOn") : t("al.smtpOff")}
         </div>
       </div>
 
       <div>
-        <div className="section-head" style={{ marginBottom: 10 }}><h2 style={{ fontSize: 21 }}>{t("al.outbox")}</h2></div>
-        {!data.outbox.length && <div className="card pad muted">{t("al.outboxEmpty")}</div>}
+        <h3 style={{ marginBottom: 14 }}>{t("al.outbox")}</h3>
+        {!data.outbox.length && <div className="panel note">{t("al.outboxEmpty")}</div>}
         <div className="stack">
           {data.outbox.map((m) => (
-            <button key={m.id} className="card" onClick={() => setPreview(m.id)}
-              style={{ width: "100%", textAlign: "left", padding: "12px 16px", cursor: "pointer", borderColor: preview === m.id ? "var(--brand)" : undefined }}>
+            <button key={m.id} onClick={() => setPreview(m.id)}
+              style={{ width: "100%", textAlign: "left", padding: "14px 16px", cursor: "pointer", border: 0, background: preview === m.id ? "var(--sky-soft)" : "var(--step)", marginBottom: 2 }}>
               <div className="spread">
-                <b style={{ fontWeight: 600, fontSize: 14 }}>{m.subject}</b>
-                <span className={`pill ${m.status === "sent" ? "ok" : m.status === "failed" ? "danger" : "warn"}`}>
+                <b style={{ fontSize: 15 }}>{m.subject}</b>
+                <span className={`tag ${m.status === "sent" ? "ok" : m.status === "failed" ? "danger" : "warn"}`}>
                   {m.status === "sent" ? t("al.statusSent") : m.status === "failed" ? t("al.statusFailed") : t("al.statusPreview")}
                 </span>
               </div>
-              <div className="muted small">{m.email} · {fmtDate(m.created_at, lang)}</div>
+              <div className="note">{m.email} · {fmtDate(m.created_at, lang)}</div>
             </button>
           ))}
         </div>
         {preview && (
-          <div className="card" style={{ marginTop: 12, overflow: "hidden" }}>
-            <div className="panel-title" style={{ padding: "10px 14px 0" }}>{t("al.preview")}</div>
+          <div style={{ marginTop: 14, background: "var(--step)" }}>
+            <div className="note" style={{ padding: "10px 14px" }}>{t("al.preview")}</div>
             {/* Sandboxed: the email HTML can't run scripts or navigate the page. */}
             <iframe title={t("al.preview")} srcDoc={previewHtml} style={{ width: "100%", height: 600, border: 0, background: "#F4F7FD", display: "block" }} sandbox="allow-popups allow-popups-to-escape-sandbox" />
           </div>

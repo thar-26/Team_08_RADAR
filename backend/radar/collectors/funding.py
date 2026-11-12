@@ -20,6 +20,14 @@ def _clean(s: str | None) -> str:
     return re.sub(r"\s+", " ", htmllib.unescape(s)).strip()
 
 
+def _phone(raw: str | None) -> str:
+    """Vinnova's feed drops the '+' of international numbers (' 46 8 473 3150')."""
+    p = re.sub(r"\s+", " ", (raw or "").strip())
+    if not p:
+        return ""
+    return "+" + p if p.startswith("46 ") else p
+
+
 # ---------------------------------------------------------------- Vinnova
 VINNOVA = "https://data.vinnova.se/api"
 
@@ -42,6 +50,13 @@ def collect_vinnova() -> int:
         apply_url = next((l["URL"] for l in links if "ansok.vinnova.se" in l.get("URL", "")), "")
         info_url = next((l["URL"] for l in links if "vinnova.se" in l.get("URL", "") and "ansok." not in l["URL"]), "")
         call = calls.get(r.get("DiarienummerUtlysning"), {})
+        # Vinnova publishes named contact persons per call so applicants can reach them.
+        contacts = [
+            {"name": (k.get("Namn") or "").strip(), "role": (k.get("Roll") or "").strip(),
+             "email": (k.get("Epost") or "").strip(), "phone": _phone(k.get("Telefon"))}
+            for k in (r.get("KontaktLista") or call.get("KontaktLista") or [])
+            if (k.get("Epost") or "").strip() or (k.get("Telefon") or "").strip()
+        ]
         title = r.get("TitelEngelska") or r.get("Titel")
         summary = _clean(purpose or r.get("BeskrivningEngelska") or r.get("Beskrivning"))
         db.upsert(
@@ -58,7 +73,7 @@ def collect_vinnova() -> int:
                 "published": (call.get("Publiceringsdatum") or r.get("Oppningsdatum") or "")[:10],
                 "opens": (r.get("Oppningsdatum") or "")[:10], "deadline": close,
                 "event_date": None, "location_mode": None, "location": "Sweden", "audience": _clean(who)[:300],
-                "budget": "", "programme": "Vinnova",
+                "budget": "", "programme": "Vinnova", "contacts": json.dumps(contacts, ensure_ascii=False),
                 "text": _clean(f"{title}. {summary} Who can apply: {who} {rest}")[:4000],
                 "fetched_at": fetched, "simulated": 0,
             },

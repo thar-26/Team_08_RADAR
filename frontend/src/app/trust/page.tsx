@@ -39,22 +39,22 @@ export default function Trust() {
 
   return (
     <>
-      <section className="pagehead">
+      <section className="pagehead pagehead-pad">
         <div className="shell">
-          <div className="eyebrow">{t("trust.eyebrow")}</div>
-          <h1 style={{ marginTop: 8 }}>{t("trust.title")}</h1>
-          <p className="lede">{t("trust.lede")}</p>
+          
+          <h1>{t("trust.title")}</h1>
+          <p className="lead">{t("trust.lede")}</p>
         </div>
       </section>
 
       <section className="shell" style={{ marginTop: 24 }}>
-        <div className="card pad">
+        <div className="panel">
           <form className="row" onSubmit={(e) => { e.preventDefault(); if (msg.trim()) run(msg); }}>
             <input className="input" style={{ flex: 1, minWidth: 240 }} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={t("trust.placeholder")} aria-label={t("trust.placeholder")} />
             <button className="btn" disabled={busy || !msg.trim()}>{busy ? t("trust.running") : t("trust.run")}</button>
           </form>
           <div className="row" style={{ marginTop: 12, gap: 6 }}>
-            {PRESETS.map((k) => <button key={k} className="btn ghost small" onClick={() => run(t(k))}>{t(k)}</button>)}
+            {PRESETS.map((k) => <button key={k} className="btn quiet small" onClick={() => run(t(k))}>{t(k)}</button>)}
           </div>
           {(res || busy) && (
             <div className="grid" style={{ marginTop: 20, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
@@ -73,9 +73,9 @@ export default function Trust() {
         {loading && <Skeleton h={240} />}
         {r && (
           <>
-            <div className="section-head">
+            <div className="spread" style={{ marginBottom: 24, alignItems: "flex-end" }}>
               <h2>{t("trust.suite")}</h2>
-              <span className={`pill ${r.boundaries.no_unsafe_answers ? "ok" : "danger"}`}>
+              <span className={`tag ${r.boundaries.no_unsafe_answers ? "ok" : "danger"}`}>
                 {t("trust.suiteMeta", { a: r.boundaries.exact, b: r.boundaries.total, safe: r.boundaries.no_unsafe_answers ? t("trust.noUnsafe") : t("trust.unsafe"), date: fmtDate(r.generated_at, lang) })}
               </span>
             </div>
@@ -86,7 +86,7 @@ export default function Trust() {
                   {r.boundaries.cases.map((c) => (
                     <tr key={c.message}>
                       <td>{c.message}</td><td>{g(c.expected)}</td><td>{g(c.got)}</td>
-                      <td>{c.pass ? <span className="pill ok">✓ {t("trust.pass")}</span> : <span className="pill danger">{t("trust.miss")}</span>}</td>
+                      <td>{c.pass ? <span className="tag ok">{t("trust.pass")}</span> : <span className="tag danger">{t("trust.miss")}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -95,18 +95,18 @@ export default function Trust() {
 
             <div className="two-col" style={{ marginTop: 48 }}>
               <div>
-                <div className="section-head"><h2>{t("trust.injTitle")}</h2><span className="pill warn">{t("trust.simCo")}</span></div>
-                <p className="muted" style={{ marginTop: -6 }}>{t("trust.injLede")}</p>
-                <pre className="card" style={{ padding: 18, whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6, fontFamily: "var(--font-mono), monospace", overflowX: "auto" }}>
+                <div className="spread" style={{ marginBottom: 24, alignItems: "flex-end" }}><h2>{t("trust.injTitle")}</h2><span className="tag warn">{t("trust.simCo")}</span></div>
+                <p className="note" style={{ marginTop: -6 }}>{t("trust.injLede")}</p>
+                <pre className="panel" style={{ padding: 18, whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6, fontFamily: "var(--font-mono), monospace", overflowX: "auto" }}>
                   {before}<span className="hl">{hidden}</span>{after}
                 </pre>
                 <div className="row">
-                  <span className="pill danger">{t("trust.injScore", { n: (r.injection.page_injection_score * 100).toFixed(1) })}</span>
-                  <span className={`pill ${r.injection.profile_followed_injection ? "danger" : "ok"}`}>{r.injection.profile_followed_injection ? t("trust.injFollowed") : `✓ ${t("trust.injIgnored")}`}</span>
+                  <span className="tag danger">{t("trust.injScore", { n: (r.injection.page_injection_score * 100).toFixed(1) })}</span>
+                  <span className={`tag ${r.injection.profile_followed_injection ? "danger" : "ok"}`}>{r.injection.profile_followed_injection ? t("trust.injFollowed") : t("trust.injIgnored")}</span>
                 </div>
               </div>
               <div>
-                <div className="section-head"><h2>{t("trust.wrote")}</h2></div>
+                <div className="spread" style={{ marginBottom: 24, alignItems: "flex-end" }}><h2>{t("trust.wrote")}</h2></div>
                 <div className="claims">
                   {(data?.injection_demo.profile?.claims ?? []).slice(0, 9).map((c) => (
                     <div key={c.id} className="claim" style={{ gridTemplateColumns: "14px 1fr" }}>
@@ -114,13 +114,13 @@ export default function Trust() {
                     </div>
                   ))}
                 </div>
-                <p className="muted small">{t("trust.wroteNote")}</p>
+                <p className="note">{t("trust.wroteNote")}</p>
               </div>
             </div>
 
-            <div className="section-head" style={{ marginTop: 48 }}>
+            <div className="spread" style={{ marginBottom: 24, marginTop: 64, alignItems: "flex-end" }}>
               <h2>{t("trust.acc")}</h2>
-              <span className="muted small">{t("trust.accMeta", { n: r.recommendations.feed_items_with_link_and_date })}</span>
+              <span className="note">{t("trust.accMeta", { n: r.recommendations.feed_items_with_link_and_date })}</span>
             </div>
             <div className="table-wrap">
               <table className="table">
@@ -134,7 +134,7 @@ export default function Trust() {
                       <td><b style={{ fontWeight: 600 }}>{p.name}</b></td><td>{p.claims}</td><td>{p.facts}</td>
                       <td>{p.facts_with_verified_quote}/{p.facts}</td><td>{p.downgraded_by_verifier}</td>
                       <td>{p.claims_with_source_and_date}/{p.claims}</td>
-                      <td>{p.interests_never_marked_fact ? <span className="pill ok">{t("trust.yes")}</span> : <span className="pill danger">{t("trust.no")}</span>}</td>
+                      <td>{p.interests_never_marked_fact ? <span className="tag ok">{t("trust.yes")}</span> : <span className="tag danger">{t("trust.no")}</span>}</td>
                       <td>{p.sources}</td>
                     </tr>
                   ))}
@@ -142,13 +142,13 @@ export default function Trust() {
               </table>
             </div>
 
-            <div className="section-head" style={{ marginTop: 48 }}>
+            <div className="spread" style={{ marginBottom: 24, marginTop: 64, alignItems: "flex-end" }}>
               <h2>{t("trust.personal")}</h2>
-              <span className="pill brand">{t("trust.overlap", { n: (r.recommendations.mean_overlap * 100).toFixed(0) })}</span>
+              <span className="tag brand">{t("trust.overlap", { n: (r.recommendations.mean_overlap * 100).toFixed(0) })}</span>
             </div>
-            <p className="muted" style={{ marginTop: -6 }}>{t("trust.personalNote", { n: r.recommendations.sme_only_calls_in_large_company_top10.length })}</p>
+            <p className="note" style={{ marginTop: -6 }}>{t("trust.personalNote", { n: r.recommendations.sme_only_calls_in_large_company_top10.length })}</p>
             <div className="row" style={{ gap: 8 }}>
-              {r.recommendations.pairwise_overlap.map((p) => <span key={p.a + p.b} className="pill">{p.a} × {p.b}: {(p.top10_overlap * 100).toFixed(0)}%</span>)}
+              {r.recommendations.pairwise_overlap.map((p) => <span key={p.a + p.b} className="tag">{p.a} × {p.b}: {(p.top10_overlap * 100).toFixed(0)}%</span>)}
             </div>
           </>
         )}
@@ -159,11 +159,11 @@ export default function Trust() {
 
 function Layer({ title, sub, value, flag, note, strong }: { title: string; sub: string; value: string; flag: boolean; note: string; strong?: boolean }) {
   return (
-    <div className="card" style={{ padding: 16, background: strong ? (flag ? "var(--danger-soft)" : "var(--ok-soft)") : "var(--surface-2)", border: 0 }}>
+    <div className="panel" style={{ padding: 16, background: strong ? (flag ? "var(--danger-soft)" : "var(--ok-soft)") : "var(--step)", border: 0 }}>
       <div className="panel-title" style={{ marginBottom: 0 }}>{title}</div>
-      <div className="muted small">{sub}</div>
-      <div style={{ fontFamily: "var(--font-head)", fontWeight: 600, fontSize: 20, marginTop: 10, color: flag ? "var(--danger)" : "var(--ok)" }}>{value}</div>
-      <div className="muted small" style={{ marginTop: 4 }}>{note}</div>
+      <div className="note">{sub}</div>
+      <div style={{ fontWeight: 900, fontSize: 24, letterSpacing: "-0.03em", marginTop: 10, color: flag ? "var(--danger)" : "var(--ok)" }}>{value}</div>
+      <div className="note" style={{ marginTop: 4 }}>{note}</div>
     </div>
   );
 }

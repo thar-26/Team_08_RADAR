@@ -64,6 +64,8 @@ export type Opportunity = {
   programme: string | null;
   fetched_at: string;
   simulated: boolean;
+  contacts: { name: string; role: string; email: string; phone: string }[];
+  contact_links: { label: string; url: string }[];
 };
 export type Explanation = {
   relevance: "strong" | "possible" | "weak";

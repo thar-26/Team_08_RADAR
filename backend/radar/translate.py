@@ -32,6 +32,21 @@ class _Batch(BaseModel):
     items: list[_Item]
 
 
+_EN_WORDS = {"the", "and", "with", "for", "its", "which", "that", "this", "could", "may", "has", "are", "is", "of", "to"}
+_SV_WORDS = {"och", "att", "för", "med", "som", "är", "det", "en", "ett", "kan", "har", "på", "till", "av", "de"}
+
+
+def _wrong_language(text: str, lang: str) -> bool:
+    """True when a 'translation' still reads as the other language (the model
+    sometimes returns the input unchanged)."""
+    words = [w.strip(".,;:()\"'").lower() for w in text.split()]
+    if len(words) < 6:
+        return False
+    en = sum(w in _EN_WORDS for w in words)
+    sv = sum(w in _SV_WORDS for w in words)
+    return en > sv if lang == "sv" else sv > en
+
+
 def _key(text: str, lang: str) -> str:
     return f"tr:{lang}:" + hashlib.sha256(text.encode()).hexdigest()
 
@@ -46,7 +61,7 @@ def translate(texts: list[str], lang: str) -> list[str]:
         if not t or not t.strip():
             continue
         hit = db.one("SELECT response FROM llm_cache WHERE key=?", (_key(t, lang),))
-        if hit:
+        if hit and not _wrong_language(hit["response"], lang):
             out[i] = hit["response"]
         else:
             todo.setdefault(t, []).append(i)
@@ -68,7 +83,8 @@ def translate(texts: list[str], lang: str) -> list[str]:
                 by_id = {}
             for j, src in enumerate(chunk):
                 tr = by_id.get(j)
-                if not tr or not tr.strip():
+                # Still in the source language? Retry in a smaller batch (single items are accepted).
+                if not tr or not tr.strip() or (_wrong_language(tr, lang) and size > 1):
                     missed.append(src)
                     continue
                 db.upsert("llm_cache", {"key": _key(src, lang), "response": tr, "created_at": now_iso()}, ["key"])

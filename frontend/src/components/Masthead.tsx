@@ -11,6 +11,18 @@ const LINKS: { href: string; key: Key }[] = [
   { href: "/how", key: "nav.how" },
 ];
 
+/** Radar's own mark: a scope with one sweep line. Not Blue Science Park's logo. */
+export function Mark({ className = "mark" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" aria-hidden>
+      <circle cx="16" cy="16" r="14.5" fill="none" stroke="#00a3e2" strokeWidth="3" />
+      <circle cx="16" cy="16" r="7" fill="none" stroke="#ffffff" strokeWidth="2" opacity=".55" />
+      <path d="M16 16 L27 8" stroke="#ffffff" strokeWidth="3" strokeLinecap="square" />
+      <circle cx="22" cy="21" r="2.5" fill="#a2eaf5" />
+    </svg>
+  );
+}
+
 export default function Masthead() {
   const path = usePathname();
   const { t, lang, setLang } = useI18n();
@@ -18,9 +30,8 @@ export default function Masthead() {
     <header className="topbar">
       <div className="shell topbar-inner">
         <Link href="/" className="brand" aria-label="Radar">
-          <span className="sweep" aria-hidden />
-          <span className="brand-word">Radar</span>
-          <span className="brand-sub">{t("brand.sub")}</span>
+          <Mark />
+          <span className="brand-word" translate="no">Radar</span>
         </Link>
         <nav className="nav" aria-label="Main">
           {LINKS.map((l) => {

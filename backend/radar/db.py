@@ -140,6 +140,8 @@ def init() -> None:
         cols = {r[1] for r in c.execute("PRAGMA table_info(opportunities)").fetchall()}
         if "title_sv" not in cols:
             c.execute("ALTER TABLE opportunities ADD COLUMN title_sv TEXT")
+        if "contacts" not in cols:
+            c.execute("ALTER TABLE opportunities ADD COLUMN contacts TEXT")
 
 
 def rows(sql: str, params: tuple | list = ()) -> list[dict[str, Any]]:

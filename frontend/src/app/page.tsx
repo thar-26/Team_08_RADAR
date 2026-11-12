@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { PHOTOS } from "@/components/Footer";
 import Scope from "@/components/Scope";
-import { ErrorNote, KindPill, Skeleton, SourceLink, useFetch, When } from "@/components/ui";
-import { api, fmtDate, withLang, type Eco, type Member, type Overview } from "@/lib/api";
+import { ErrorNote, KindPill, Skeleton, SourceLink, useFetch } from "@/components/ui";
+import { api, daysUntil, fmtDate, withLang, type Eco, type Member, type Overview } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 export default function Home() {
@@ -15,110 +16,128 @@ export default function Home() {
 
   return (
     <>
+      {/* The radar sweeps over the real archipelago around Karlskrona. */}
       <section className="hero">
-        <div className="shell" style={{ paddingTop: 48, paddingBottom: 84, position: "relative", zIndex: 1 }}>
-          <div className="two-col" style={{ alignItems: "center", gridTemplateColumns: "minmax(0,1.15fr) minmax(0,1fr)" }}>
-            <div>
-              <span className="pill onblue">{t("home.eyebrow")}</span>
-              <h1 style={{ marginTop: 18 }}>
-                {t("home.title1")}
-                <br />
-                <span style={{ color: "#FFC233" }}>{t("home.title2")}</span>
-              </h1>
-              <p className="lede" style={{ marginTop: 18 }}>{t("home.lede")}</p>
-              <div className="row" style={{ marginTop: 26 }}>
-                <Link className="btn white" href={demo[0] ? `/c/${demo[0].slug}` : "/members"}>{t("home.cta")} →</Link>
-                <Link className="btn outline-white" href="/trust">{t("home.cta2")}</Link>
-              </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="hero-photo" src="/assets/karlskrona-from-plane.jpg" alt="" width={1920} height={1280} fetchPriority="high" />
+        <div className="hero-scrim" />
+        <div className="shell hero-inner">
+          <div>
+            <h1 className="display" data-reveal>{t("home.title1")}<br />{t("home.title2")}</h1>
+            <p className="lead" data-reveal>{t("home.lede")}</p>
+            <div className="row" style={{ marginTop: 36, gap: 14 }} data-reveal>
+              <Link className="btn sky" href={demo[0] ? `/c/${demo[0].slug}` : "/members"}>{t("home.cta")}</Link>
+              <Link className="btn line" href="/trust">{t("home.cta2")}</Link>
             </div>
-            <div style={{ maxWidth: 440, width: "100%", justifySelf: "center" }}>
-              {eco.data ? <Scope eco={eco.data} /> : <div className="scope"><div className="scope-sweep" /></div>}
-              <p style={{ textAlign: "center", marginTop: 12, fontSize: 13, opacity: 0.8 }}>
-                {eco.data ? t("home.scopeCaption", { n: eco.data.nodes.length }) : t("home.scopeLoading")} · {t("home.scopeLegend")}
-              </p>
-            </div>
+          </div>
+          <div style={{ maxWidth: 560, width: "100%", justifySelf: "center" }}>
+            {eco.data ? <Scope eco={eco.data} /> : <div className="scope"><div className="scope-sweep" /></div>}
+            <p className="small" style={{ textAlign: "center", marginTop: 14, color: "rgba(255,255,255,.85)" }}>
+              {eco.data ? t("home.scopeCaption", { n: eco.data.nodes.length }) : t("home.scopeLoading")}. {t("home.scopeLegend")}.
+            </p>
           </div>
         </div>
       </section>
 
-      <section className="shell">
-        <div className="stats">
-          {([
-            [ov.data?.members, "stat.members"],
-            [ov.data?.opportunities.funding, "stat.funding"],
-            [ov.data?.opportunities.event, "stat.events"],
-            [ov.data?.opportunities.testbed, "stat.testbeds"],
-          ] as [number | undefined, Key][]).map(([n, l]) => (
-            <div className="stat" key={l}>
-              <div className="num">{n ?? "–"}</div>
-              <div className="lbl">{t(l)}</div>
-            </div>
-          ))}
+      <section className="field-navy">
+        <div className="shell">
+          <div className="figures">
+            {([
+              [ov.data?.members, "stat.members"],
+              [ov.data?.opportunities.funding, "stat.funding"],
+              [ov.data?.opportunities.event, "stat.events"],
+              [ov.data?.opportunities.testbed, "stat.testbeds"],
+            ] as [number | undefined, Key][]).map(([n, l]) => (
+              <div className="figure" key={l} data-reveal><b>{n ?? "–"}</b><span>{t(l)}</span></div>
+            ))}
+          </div>
         </div>
-        {ov.error && <div style={{ marginTop: 16 }}><ErrorNote error={ov.error} /></div>}
       </section>
+      {ov.error && <div className="shell" style={{ marginTop: 24 }}><ErrorNote error={ov.error} /></div>}
 
-      <section className="shell section">
-        <div className="two-col">
+      <section className="section">
+        <div className="shell side">
           <div>
-            <div className="section-head">
+            <div className="spread" style={{ alignItems: "flex-end", marginBottom: 28 }}>
               <h2>{t("home.watch")}</h2>
-              <Link href="/members">{t("home.allMembers", { n: members.data?.length ?? "" })} →</Link>
+              <Link href="/members">{t("home.allMembers", { n: members.data?.length ?? "" })}</Link>
             </div>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-              {members.loading && [0, 1, 2, 3].map((i) => <div key={i} className="card pad"><Skeleton h={90} /></div>)}
+            <div className="list">
+              {members.loading && <Skeleton h={300} />}
               {demo.map((m) => (
-                <Link key={m.slug} href={`/c/${m.slug}`} className="card pad lift" style={{ display: "block", color: "inherit" }}>
-                  <div className="spread">
-                    <span className="pill">{m.industry || "—"}</span>
-                    <span className="dot confirmed" />
+                <Link key={m.slug} href={`/c/${m.slug}`} className="list-row" data-reveal>
+                  <div>
+                    <h3>{m.name}</h3>
+                    <div className="note" style={{ marginTop: 4 }}>{m.industry || "—"} · {m.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</div>
                   </div>
-                  <h3 style={{ marginTop: 12 }}>{m.name}</h3>
-                  <div className="muted small" style={{ marginTop: 2 }}>{m.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</div>
-                  <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 600, color: "var(--brand-text)" }}>{t("home.openRadar")} →</div>
+                  <span className="arrow" aria-hidden>→</span>
                 </Link>
               ))}
             </div>
           </div>
-
-          <div>
-            <div className="section-head">
-              <h2>{t("home.soon")}</h2>
-              <span className="muted small">{t("home.asOf", { date: fmtDate(ov.data?.today, lang) })}</span>
-            </div>
-            <div className="card" style={{ padding: "4px 18px" }}>
-              {ov.loading && <div style={{ padding: 14 }}><Skeleton h={120} /></div>}
-              {(ov.data?.closing_soon ?? []).map((o, i, a) => (
-                <div key={o.id} style={{ padding: "14px 0", borderBottom: i < a.length - 1 ? "1px solid var(--line)" : 0 }}>
-                  <div className="row" style={{ gap: 8 }}><KindPill kind={o.kind} /><span className="muted small">{o.source_name}</span></div>
-                  <a href={o.url} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 6, fontSize: 14.5, fontWeight: 600, color: "var(--ink)" }}>{o.title}</a>
-                  <div className="meta"><When o={o} /></div>
-                </div>
-              ))}
-            </div>
+          <div className="panel navy">
+            <h3 style={{ marginBottom: 14 }}>{t("home.soon")}</h3>
+            {(ov.data?.closing_soon ?? []).map((o) => {
+              const d = daysUntil(o.deadline);
+              return (
+                <a key={o.id} href={o.url} target="_blank" rel="noreferrer" style={{ display: "block", padding: "14px 0", borderTop: "1px solid var(--line-navy)", color: "#fff" }}>
+                  <span style={{ fontWeight: 700, lineHeight: 1.3, display: "block" }}>{o.title}</span>
+                  <span style={{ fontSize: 15, opacity: .8 }}><b className="num" style={{ color: "var(--sky)" }}>{d === 0 ? t("feed.today") : t("feed.days", { n: d ?? "–" })}</b> · {o.source_name}</span>
+                </a>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      <section className="shell" style={{ paddingBottom: 24 }}>
-        <div className="section-head">
-          <h2>{t("home.sources")}</h2>
-          <span className="muted small">{t("home.sourcesNote")}</span>
+      <section className="section field-navy">
+        <div className="shell">
+          <h2 data-reveal>{t("place.title")}</h2>
+          <p className="lead" style={{ marginTop: 18, color: "rgba(255,255,255,.86)" }} data-reveal>{t("place.lede")}</p>
+          <div className="place">
+            {([
+              ["ship", "place.marine", "place.marineText", "tall"],
+              ["campus", "place.research", "place.researchText", "short"],
+              ["island", "place.city", "place.cityText", "short"],
+            ] as const).map(([k, h, d, size]) => {
+              const ph = PHOTOS[k];
+              return (
+                <figure key={k} className={size} data-reveal>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={ph.src} alt={ph.title} loading="lazy" width={1920} height={1270} />
+                  <figcaption>
+                    <b>{t(h)}</b>
+                    <span>{t(d)}</span>
+                    <small>{t("place.credit")}: <a href={ph.page}>{ph.title}</a>, {ph.by}, {ph.licence}</small>
+                  </figcaption>
+                </figure>
+              );
+            })}
+          </div>
         </div>
-        <div className="table-wrap">
-          <table className="table">
-            <thead><tr><th>{t("th.source")}</th><th>{t("th.feeds")}</th><th>{t("th.items")}</th><th>{t("th.retrieved")}</th></tr></thead>
-            <tbody>
-              {(ov.data?.sources ?? []).map((s) => (
-                <tr key={s.source + s.kind}>
-                  <td>{s.url ? <SourceLink url={s.url} label={s.name ?? s.source} /> : s.source}</td>
-                  <td><KindPill kind={s.kind as "funding" | "event" | "testbed"} /></td>
-                  <td>{s.n}</td>
-                  <td className="muted">{fmtDate(s.fetched_at, lang)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      </section>
+
+      <section className="section field-step">
+        <div className="shell">
+          <div className="spread" style={{ alignItems: "flex-end", marginBottom: 28 }}>
+            <h2>{t("home.sources")}</h2>
+            <span className="note">{t("home.sourcesNote")}</span>
+          </div>
+          <div className="table-wrap">
+            <table className="table">
+              <thead><tr><th>{t("th.source")}</th><th>{t("th.feeds")}</th><th>{t("th.items")}</th><th>{t("th.retrieved")}</th></tr></thead>
+              <tbody>
+                {(ov.data?.sources ?? []).map((s) => (
+                  <tr key={s.source + s.kind}>
+                    <td>{s.url ? <SourceLink url={s.url} label={s.name ?? s.source} /> : s.source}</td>
+                    <td><KindPill kind={s.kind as "funding" | "event" | "testbed"} /></td>
+                    <td className="num">{s.n}</td>
+                    <td className="note">{fmtDate(s.fetched_at, lang)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </>

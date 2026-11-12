@@ -51,7 +51,24 @@ def _opp_public(o: dict) -> dict:
     o.pop("text", None)
     o["source_name"] = SOURCE_INFO.get(o["source"], {}).get("name", o["source"])
     o["simulated"] = bool(o.get("simulated"))
+    o["contacts"] = db.loads(o.get("contacts"), []) or []
+    o["contact_links"] = CONTACT_LINKS.get(o["source"], [])
     return o
+
+
+# Where to ask a person, per source. Only official, public routes; email
+# addresses that a site hides from scripts (e.g. MTC) are not extracted.
+CONTACT_LINKS = {
+    "eu": [
+        {"label": "ncp", "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/ncp"},
+        {"label": "vinnova_eu", "url": "https://www.vinnova.se/m/horisont-europa/"},
+    ],
+    "mtc": [{"label": "mtc", "url": "https://www.mtcos.se/kontakt/"}],
+    "bsp": [{"label": "bsp", "url": "https://www.bluesciencepark.se/kontakt/kontaktpersoner/"}],
+    "techconceptlab": [{"label": "organiser", "url": "https://techconceptlab.com/"}],
+    "almi": [{"label": "organiser", "url": "https://www.almi.se/blekinge/"}],
+    "netport": [{"label": "organiser", "url": "https://www.netport.se/"}],
+}
 
 
 # ---------------------------------------------------------------- localisation
@@ -114,7 +131,8 @@ def overview(lang: str = "sv"):
     counts = db.rows("SELECT kind, source, COUNT(*) n, MAX(fetched_at) fetched_at FROM opportunities GROUP BY kind, source")
     active = [o for o in db.rows("SELECT * FROM opportunities") if matcher._active(o)]
     profiled = db.rows("SELECT slug, name, profile_version, updated_at FROM companies WHERE profile IS NOT NULL AND slug NOT LIKE 'sim-%'")
-    soon = [_opp_public(o) for o in sorted([o for o in active if o.get("deadline")], key=lambda o: o["deadline"])[:5]]
+    # Calls closing today cannot be acted on any more: start from tomorrow.
+    soon = [_opp_public(o) for o in sorted([o for o in active if o.get("deadline") and o["deadline"][:10] > today().isoformat()], key=lambda o: o["deadline"])[:5]]
     tc = Collector(lang)
     _loc_opps(soon, lang, tc)
     tc.run()
@@ -251,6 +269,12 @@ def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv"):
             "explanation": db.loads(m["explanation"]) if m else None,
             "feedback": fb.get(r["opp_id"], []),
         })
+    # The Matcher's own judgement (strong/possible/weak) orders the list first,
+    # the numeric score breaks ties: a "strong fit" never sits below a "possible" one.
+    tier = {"strong": 0, "possible": 1, None: 2, "weak": 3}
+    items.sort(key=lambda i: (tier.get((i["explanation"] or {}).get("relevance")), -i["score"]))
+    for n, i in enumerate(items, 1):
+        i["rank"] = n
     tc = Collector(lang)
     _loc_opps([i["opportunity"] for i in items], lang, tc)
     for i in items:

@@ -17,3 +17,4 @@ data/models/
 data/cache/
 data/radar.db*
 frontend/.next/
+.taste-skill/

@@ -17,19 +17,27 @@ export function ErrorNote({ error }: { error: string }) {
   );
 }
 
-export function Toast({ msg, onDone }: { msg: string | null; onDone: () => void }) {
+export function Toast({ msg, onDone, action }: { msg: string | null; onDone: () => void; action?: { label: string; run: () => void } | null }) {
   useEffect(() => {
     if (!msg) return;
-    const t = setTimeout(onDone, 2800);
+    const t = setTimeout(onDone, action ? 6000 : 2800);
     return () => clearTimeout(t);
-  }, [msg, onDone]);
-  return msg ? <div className="toast" role="status">{msg}</div> : null;
+  }, [msg, onDone, action]);
+  return (
+    <div aria-live="polite">
+      {msg && (
+        <div className="toast" role="status">
+          {msg}
+          {action && <button onClick={() => { action.run(); onDone(); }}>{action.label}</button>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function KindPill({ kind }: { kind: Opportunity["kind"] }) {
   const { t } = useI18n();
-  const cls = kind === "funding" ? "brand" : kind === "event" ? "" : "ok";
-  return <span className={`pill ${cls}`}>{t(`kind.${kind}` as Key)}</span>;
+  return <span className={`tag ${kind}`}>{t(`kind.${kind}` as Key)}</span>;
 }
 
 export function When({ o }: { o: Opportunity }) {
@@ -40,7 +48,7 @@ export function When({ o }: { o: Opportunity }) {
   return (
     <span>
       {o.deadline ? t("feed.deadline") : t("feed.date")} <b>{fmtDate(d, lang)}</b>
-      {n !== null && n >= 0 && <span className={n <= 21 ? "countdown" : ""}> · {n === 0 ? t("feed.today") : t("feed.days", { n })}</span>}
+      {n !== null && n >= 0 && <span className={n <= 21 ? "soon" : ""}> · {n === 0 ? t("feed.today") : t("feed.days", { n })}</span>}
     </span>
   );
 }

@@ -13,7 +13,7 @@ function Rich({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("**") && p.endsWith("**") ? <b key={i} style={{ fontWeight: 600 }}>{p.slice(2, -2)}</b>
-        : /^\[[OP]\d+\]$/.test(p) ? <sup key={i} style={{ color: "var(--brand-text)", fontSize: 10, fontWeight: 700 }}>{p}</sup>
+        : /^\[[OP]\d+\]$/.test(p) ? <sup key={i} style={{ color: "var(--link)", fontSize: 11, fontWeight: 700 }}>{p}</sup>
         : <span key={i}>{p}</span>,
       )}
     </>
@@ -52,23 +52,23 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
   }
 
   return (
-    <aside className={`drawer ${open ? "open" : ""}`} aria-hidden={!open} aria-label={t("co.ask")}>
+    <aside className={`drawer ${open ? "open" : ""}`} inert={!open} aria-label={t("co.ask")}>
       <div className="drawer-head">
         <div>
           <div style={{ fontWeight: 600 }}>{t("chat.title", { name })}</div>
           <div style={{ fontSize: 12.5, opacity: 0.8 }}>{t("chat.sub")}</div>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-          <button className="btn ghost small" onClick={clear}>{t("chat.clear")}</button>
-          <button className="btn ghost small" onClick={onClose} aria-label={t("chat.close")}>✕</button>
+          <button className="btn small" onClick={() => { if (!msgs.length || confirm(t("chat.confirmClear"))) clear(); }}>{t("chat.clear")}</button>
+          <button className="btn small" onClick={onClose} >{t("chat.close")}</button>
         </div>
       </div>
       <div className="chat-log" ref={logRef}>
         {!msgs.length && (
-          <div className="stack">
-            <p className="muted small" style={{ margin: 0 }}>{t("chat.try")}</p>
+          <div className="chat-suggest">
+            <p className="note" style={{ margin: 0 }}>{t("chat.try")}</p>
             {(["chat.s1", "chat.s2", "chat.s3"] as Key[]).map((k) => (
-              <button key={k} className="btn ghost small" style={{ textAlign: "left", justifyContent: "flex-start", width: "100%" }} onClick={() => send(t(k))}>{t(k)}</button>
+              <button key={k} className="btn small" style={{ textAlign: "left", justifyContent: "flex-start", width: "100%", textTransform: "none", letterSpacing: 0, fontWeight: 500, fontSize: 15, background: "var(--white)", color: "var(--ink)", marginBottom: 2 }} onClick={() => send(t(k))}>{t(k)}</button>
             ))}
           </div>
         )}
@@ -76,7 +76,7 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
           <div key={i} className={`msg ${m.role}`}>
             {m.resp && m.resp.guard.category !== "relevant" && (
               <div style={{ marginBottom: 6 }}>
-                <span className={`pill ${m.resp.guard.category === "unclear" ? "brand" : "danger"}`}>{t(`guard.${m.resp.guard.category}` as Key)}</span>
+                <span className={`tag ${m.resp.guard.category === "unclear" ? "funding" : "danger"}`}>{t(`guard.${m.resp.guard.category}` as Key)}</span>
               </div>
             )}
             <div style={{ whiteSpace: "pre-wrap" }}>{m.role === "assistant" ? <Rich text={m.text} /> : m.text}</div>
@@ -90,7 +90,7 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
               <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
                 {m.resp.citations.map((c) => (
                   <div key={c.ref} className="stamp" style={{ display: "flex" }}>
-                    <b style={{ color: "var(--brand-text)" }}>[{c.ref}]</b>
+                    <b style={{ color: "var(--link)" }}>[{c.ref}]</b>
                     <a href={c.url} target="_blank" rel="noreferrer">{c.title.slice(0, 64)}{c.title.length > 64 ? "…" : ""} · {host(c.url)} ↗</a>
                   </div>
                 ))}
@@ -98,10 +98,10 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
             )}
           </div>
         ))}
-        {busy && <div className="msg assistant muted small">{t("chat.busy")}</div>}
+        {busy && <div className="msg assistant note">{t("chat.busy")}</div>}
       </div>
       <form className="chat-form" onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("chat.placeholder")} aria-label={t("chat.placeholder")} />
+        <input className="input" name="message" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("chat.placeholder")} aria-label={t("chat.placeholder")} />
         <button className="btn" disabled={busy || !text.trim()}>{t("chat.send")}</button>
       </form>
     </aside>

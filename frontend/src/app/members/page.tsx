@@ -34,39 +34,38 @@ export default function Members() {
 
   return (
     <>
-      <section className="pagehead">
+      <section className="pagehead pagehead-pad">
         <div className="shell">
-          <div className="eyebrow">{t("members.eyebrow")}</div>
-          <div className="spread" style={{ marginTop: 8 }}>
+          
+          <div className="spread">
             <h1>{t("members.title")}</h1>
             <input className="input" style={{ maxWidth: 320 }} placeholder={t("members.filter")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("members.filter")} />
           </div>
-          <p className="lede">{t("members.lede")}</p>
+          <p className="lead">{t("members.lede")}</p>
         </div>
       </section>
-      <section className="shell section" style={{ paddingTop: 28 }}>
+      <section className="shell section" style={{ paddingTop: 48 }}>
         {error && <ErrorNote error={error} />}
         {err && <div className="banner" style={{ marginBottom: 16 }}>{err}</div>}
-        {loading && <Skeleton h={240} />}
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 14 }}>
+        {loading && <Skeleton h={300} />}
+        <div className="list">
           {list.map((m) => (
-            <div key={m.slug} id={m.slug} className="card pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div className="spread">
-                <span className="pill">{m.industry || "—"}</span>
-                {m.profiled && <span className="dot confirmed" title="Profiled" />}
-              </div>
-              <h3>{m.name}</h3>
-              <div className="row" style={{ marginTop: "auto", gap: 8 }}>
-                {m.profiled ? (
-                  <Link className="btn small" href={`/c/${m.slug}`}>{t("members.open")}</Link>
-                ) : (
-                  <button className="btn soft small" disabled={!!busy || !m.website} onClick={() => build(m.slug)}>
-                    {busy === m.slug ? t("members.building") : t("members.build")}
-                  </button>
-                )}
-                {m.website && <a className="small" href={m.website} target="_blank" rel="noreferrer">{t("members.website")} ↗</a>}
-                <a className="small" href={m.bsp_page} target="_blank" rel="noreferrer">BSP ↗</a>
-              </div>
+            <div key={m.slug} id={m.slug} className="list-row" style={{ gridTemplateColumns: "minmax(0,1.2fr) minmax(0,1fr) auto", padding: "18px 0" }}>
+              <h3 style={{ fontSize: 22 }}>
+                {m.profiled ? <Link href={`/c/${m.slug}`} style={{ color: "inherit" }}>{m.name}</Link> : m.name}
+              </h3>
+              <span className="note" style={{ fontSize: 15 }}>
+                {m.industry || "—"}
+                {m.website && <> · <a href={m.website} target="_blank" rel="noreferrer">{t("members.website")}</a></>}
+                {" · "}<a href={m.bsp_page} target="_blank" rel="noreferrer">Blue Science Park</a>
+              </span>
+              {m.profiled ? (
+                <Link className="btn small" href={`/c/${m.slug}`}>{t("members.open")}</Link>
+              ) : (
+                <button className="btn quiet small" disabled={!!busy || !m.website} onClick={() => build(m.slug)}>
+                  {busy === m.slug ? t("members.building") : t("members.build")}
+                </button>
+              )}
             </div>
           ))}
         </div>
