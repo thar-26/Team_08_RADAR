@@ -73,6 +73,19 @@ def match() -> None:
     for slug in DEMO_COMPANIES:
         step(f"match {slug}", matcher.refresh_matches, slug)
         step(f"connect {slug}", connector.suggest, slug)
+    # Notifier: email subscribers about matches they have not been told about yet.
+    from .agents import notifier
+
+    step("notify subscribers", notifier.run_all)
+
+
+def warm_translations() -> None:
+    """Pre-translate demo content to Swedish so the first page load is instant."""
+    from . import api
+
+    for slug in DEMO_COMPANIES:
+        step(f"translate {slug}", lambda s: (api.company(s, "sv"), api.feed(s, lang="sv"), api.connections(s, "sv")) and "ok", slug)
+    step("translate overview", lambda: api.overview("sv") and "ok")
 
 
 def watch() -> None:
@@ -99,8 +112,14 @@ def main(argv: list[str]) -> None:
         profile()
     if cmd in ("match", "all"):
         match()
+    if cmd in ("translate", "all"):
+        warm_translations()
     if cmd == "watch":
         watch()
+    if cmd == "notify":
+        from .agents import notifier
+
+        step("notify subscribers", notifier.run_all)
     if cmd == "simulated":
         seed_simulated()
         step("profile simulated", profiler.build_profile, SIM_SLUG)

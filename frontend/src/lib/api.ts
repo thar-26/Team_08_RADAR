@@ -122,10 +122,21 @@ export type ChatResp = {
   guard: GuardResult;
 };
 
-export const fmtDate = (d?: string | null) => {
+export type Alerts = {
+  subscription: { email: string; kinds: string[]; min_relevance: string; lang: string; consent_at: string; active: boolean } | null;
+  outbox: { id: number; email: string; subject: string; items: number; status: "preview" | "sent" | "failed"; detail: string; created_at: string }[];
+  smtp_configured: boolean;
+  new?: number;
+  reminders?: number;
+  message?: string;
+};
+
+export const withLang = (path: string, lang: string) => `${path}${path.includes("?") ? "&" : "?"}lang=${lang}`;
+
+export const fmtDate = (d?: string | null, lang: string = "sv") => {
   if (!d) return "—";
   const dt = new Date(d.length <= 10 ? d + "T00:00:00" : d);
-  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return dt.toLocaleDateString(lang === "sv" ? "sv-SE" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
 export const daysUntil = (d?: string | null) => {
   if (!d) return null;
@@ -138,21 +149,4 @@ export const host = (u: string) => {
   } catch {
     return u;
   }
-};
-export const SECTION_LABEL: Record<string, string> = {
-  offerings: "Products & services",
-  technologies: "Technologies & expertise",
-  applications: "Application areas",
-  markets: "Markets & customers",
-  geography: "Geographic focus",
-  priorities: "Stated priorities & collaborations",
-  interests: "Possible interests",
-};
-export const GUARD_LABEL: Record<string, string> = {
-  relevant: "In scope",
-  unclear: "Needs clarification",
-  unrelated: "Outside remit",
-  override_attempt: "Override attempt blocked",
-  needs_human: "Referred to staff",
-  other_company_private: "Private data protected",
 };

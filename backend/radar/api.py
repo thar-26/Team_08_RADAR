@@ -13,9 +13,10 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from . import db
-from .agents import concierge, connector, matcher, profiler
+from .agents import concierge, connector, matcher, notifier, profiler
 from .api_support import apply_edit
 from .config import DATA, DEMO_COMPANIES, now_iso, today
+from .translate import Collector
 
 app = FastAPI(title="Radar API", version="0.1.0")
 app.add_middleware(
@@ -53,17 +54,70 @@ def _opp_public(o: dict) -> dict:
     return o
 
 
+# ---------------------------------------------------------------- localisation
+# Texts that were published in Swedish (event titles, testbed pages) are kept in
+# Swedish for sv and translated for en; agent output (English) is translated for sv.
+SWEDISH_ORIGIN = {"event": {"title"}, "testbed": {"title", "summary"}}
+
+
+def _lang(lang: str | None) -> str:
+    return "en" if lang == "en" else "sv"
+
+
+def _loc_opps(opps: list[dict], lang: str, tc: Collector) -> None:
+    for o in opps:
+        native_sv = SWEDISH_ORIGIN.get(o["kind"], set())
+        if lang == "sv":
+            if o.get("title_sv"):
+                o["title"] = o["title_sv"]
+            elif "title" not in native_sv and o["source"] != "eu":  # EU topic titles are official names
+                tc.add(o, "title")
+            if "summary" not in native_sv:
+                tc.add(o, "summary")
+        else:
+            for f in native_sv:
+                tc.add(o, f)
+
+
+def _loc_explanation(e: dict | None, tc: Collector) -> None:
+    if not e:
+        return
+    for k in ("why", "next_step"):
+        tc.add(e, k)
+    tc.add_list(e, "uncertainties")
+    tc.add_list(e, "profile_points")
+    for r in e.get("requirements", []):
+        tc.add(r, "requirement")
+        tc.add(r, "basis")
+
+
+def _loc_profile(p: dict, tc: Collector) -> None:
+    for k in ("summary", "size_basis"):
+        tc.add(p, k)
+    for c in p.get("claims", []):
+        if c.get("origin") == "user":
+            continue  # the company's own words stay as written
+        tc.add(c, "statement")
+        tc.add(c, "reasoning")
+    for m in p.get("missing", []):
+        tc.add(m, "note")
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "time": now_iso()}
 
 
 @app.get("/api/overview")
-def overview():
+def overview(lang: str = "sv"):
+    lang = _lang(lang)
     counts = db.rows("SELECT kind, source, COUNT(*) n, MAX(fetched_at) fetched_at FROM opportunities GROUP BY kind, source")
     active = [o for o in db.rows("SELECT * FROM opportunities") if matcher._active(o)]
     profiled = db.rows("SELECT slug, name, profile_version, updated_at FROM companies WHERE profile IS NOT NULL AND slug NOT LIKE 'sim-%'")
-    soon = sorted([o for o in active if o.get("deadline")], key=lambda o: o["deadline"])[:5]
+    soon = [_opp_public(o) for o in sorted([o for o in active if o.get("deadline")], key=lambda o: o["deadline"])[:5]]
+    tc = Collector(lang)
+    _loc_opps(soon, lang, tc)
+    tc.run()
     return {
         "members": db.one("SELECT COUNT(*) n FROM companies WHERE slug NOT LIKE 'sim-%'")["n"],
         "profiled": profiled,
@@ -73,7 +127,7 @@ def overview():
             "testbed": sum(1 for o in active if o["kind"] == "testbed"),
         },
         "sources": [c | SOURCE_INFO.get(c["source"], {}) for c in counts],
-        "closing_soon": [_opp_public(o) for o in soon],
+        "closing_soon": soon,
         "today": today().isoformat(),
     }
 
@@ -90,12 +144,20 @@ def companies():
 
 
 @app.get("/api/companies/{slug}")
-def company(slug: str):
+def company(slug: str, lang: str = "sv"):
     c = _company(slug)
     if not c["profile"]:
         raise HTTPException(409, "This member has not been profiled yet")
     return {"slug": slug, "name": c["name"], "website": c["website"], "bsp_page": c["bsp_page"],
-            "version": c["profile_version"], "updated_at": c["updated_at"], "profile": c["profile"]}
+            "version": c["profile_version"], "updated_at": c["updated_at"], "profile": _localised_profile(c["profile"], _lang(lang))}
+
+
+def _localised_profile(p: dict, lang: str) -> dict:
+    p = json.loads(json.dumps(p))
+    tc = Collector(lang)
+    _loc_profile(p, tc)
+    tc.run()
+    return p
 
 
 @app.post("/api/companies/{slug}/build")
@@ -132,6 +194,7 @@ class Edit(BaseModel):
     statement: str | None = None
     section: str | None = None
     note: str | None = None
+    lang: str | None = None
 
 
 @app.post("/api/companies/{slug}/profile")
@@ -142,7 +205,8 @@ def edit_profile(slug: str, e: Edit):
     except (ValueError, KeyError) as err:
         raise HTTPException(400, str(err)) from err
     version = profiler.save_profile(slug, new, author="user", note=note)
-    return {"version": version, "note": note, "profile": new, "feed": feed(slug)}
+    lang = _lang(e.lang)
+    return {"version": version, "note": note, "profile": _localised_profile(new, lang), "feed": feed(slug, lang=lang)}
 
 
 @app.get("/api/companies/{slug}/timeline")
@@ -160,8 +224,9 @@ def timeline(slug: str):
 
 
 @app.get("/api/companies/{slug}/feed")
-def feed(slug: str, kind: str | None = None, limit: int = 12):
+def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv"):
     _company(slug)
+    lang = _lang(lang)
     ranked = matcher.rank(slug)
     stored = {m["opp_id"]: m for m in db.rows("SELECT * FROM matches WHERE company_slug=?", (slug,))}
     fb = {}
@@ -186,11 +251,18 @@ def feed(slug: str, kind: str | None = None, limit: int = 12):
             "explanation": db.loads(m["explanation"]) if m else None,
             "feedback": fb.get(r["opp_id"], []),
         })
+    tc = Collector(lang)
+    _loc_opps([i["opportunity"] for i in items], lang, tc)
+    for i in items:
+        _loc_explanation(i["explanation"], tc)
+        if lang == "sv":
+            tc.add(i, "anchor_claim")
+    tc.run()
     return items
 
 
 @app.post("/api/companies/{slug}/explain/{opp_id:path}")
-def explain(slug: str, opp_id: str):
+def explain(slug: str, opp_id: str, lang: str = "sv"):
     _company(slug)
     if not db.one("SELECT 1 FROM opportunities WHERE id=?", (opp_id,)):
         raise HTTPException(404, "Unknown opportunity")
@@ -199,6 +271,9 @@ def explain(slug: str, opp_id: str):
     db.upsert("matches", {"company_slug": slug, "opp_id": opp_id, "score": r["score"] if r else 0,
                           "components": json.dumps((r or {}).get("components", {})), "explanation": json.dumps(exp, ensure_ascii=False),
                           "profile_version": _company(slug)["profile_version"], "created_at": now_iso()}, ["company_slug", "opp_id"])
+    tc = Collector(_lang(lang))
+    _loc_explanation(exp, tc)
+    tc.run()
     return exp
 
 
@@ -229,17 +304,23 @@ def saved(slug: str):
 
 
 @app.get("/api/companies/{slug}/connections")
-def connections(slug: str):
+def connections(slug: str, lang: str = "sv"):
     _company(slug)
     out = connector.suggest(slug)
+    tc = Collector(_lang(lang))
     for s in out:
         c = db.one("SELECT name, bsp_page, website FROM companies WHERE slug=?", (s["slug"],))
         s.update({"name": c["name"], "bsp_page": c["bsp_page"], "website": c["website"]})
+        for k in ("headline", "complementary", "caution"):
+            tc.add(s, k)
+        tc.add_list(s, "shared")
+    tc.run()
     return out
 
 
 class ChatIn(BaseModel):
     message: str
+    lang: str | None = None
 
 
 @app.post("/api/companies/{slug}/chat")
@@ -249,7 +330,83 @@ def chat(slug: str, m: ChatIn):
         raise HTTPException(409, "Profile not ready")
     if not m.message.strip():
         raise HTTPException(400, "Empty message")
-    return concierge.respond(slug, m.message.strip()[:2000])
+    lang = _lang(m.lang)
+    out = concierge.respond(slug, m.message.strip()[:2000], lang=lang)
+    tc = Collector(lang)
+    for cit in out.get("citations", []):
+        o = db.one("SELECT * FROM opportunities WHERE id=?", (cit.get("opp_id") or "",))
+        if o and lang == "sv" and o.get("title_sv"):
+            cit["title"] = o["title_sv"]
+    tc.run()
+    return out
+
+
+# ---------------------------------------------------------------- email alerts
+class AlertsIn(BaseModel):
+    email: str
+    kinds: list[str] = ["funding", "event", "testbed"]
+    min_relevance: str = "possible"
+    lang: str = "sv"
+    consent: bool = False
+
+
+@app.get("/api/companies/{slug}/alerts")
+def alerts_status(slug: str):
+    _company(slug)
+    notifier.init()
+    sub = db.one("SELECT email, kinds, min_relevance, lang, consent_at, active FROM subscriptions WHERE company_slug=?", (slug,))
+    if sub:
+        sub["kinds"] = json.loads(sub["kinds"])
+        sub["active"] = bool(sub["active"])
+    outbox = db.rows(
+        "SELECT id, email, subject, items, status, detail, created_at FROM outbox WHERE company_slug=? ORDER BY id DESC LIMIT 20", (slug,)
+    )
+    return {"subscription": sub, "outbox": outbox, "smtp_configured": notifier.smtp_configured()}
+
+
+@app.post("/api/companies/{slug}/alerts")
+def alerts_subscribe(slug: str, a: AlertsIn):
+    _company(slug)
+    if not a.consent:
+        raise HTTPException(400, "Consent is required to receive emails")
+    notifier.init()
+    try:
+        result = notifier.subscribe(slug, a.email, a.kinds, a.min_relevance, a.lang)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return result | alerts_status(slug)
+
+
+@app.post("/api/companies/{slug}/alerts/check")
+def alerts_check(slug: str):
+    _company(slug)
+    return notifier.run(slug) | alerts_status(slug)
+
+
+@app.delete("/api/companies/{slug}/alerts")
+def alerts_delete(slug: str):
+    _company(slug)
+    notifier.init()
+    db.execute("UPDATE subscriptions SET active=0 WHERE company_slug=?", (slug,))
+    return alerts_status(slug)
+
+
+class Unsub(BaseModel):
+    token: str
+
+
+@app.post("/api/alerts/unsubscribe")
+def alerts_unsubscribe(u: Unsub):
+    return {"ok": notifier.unsubscribe(u.token)}
+
+
+@app.get("/api/outbox/{msg_id}", response_class=Response)
+def outbox_html(msg_id: int):
+    notifier.init()
+    m = db.one("SELECT html FROM outbox WHERE id=?", (msg_id,))
+    if not m:
+        raise HTTPException(404)
+    return Response(m["html"], media_type="text/html")
 
 
 @app.get("/api/companies/{slug}/chat")

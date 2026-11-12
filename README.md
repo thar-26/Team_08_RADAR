@@ -25,6 +25,38 @@ breakdown, feedback that re-ranks similar items, calendar export, member-to-memb
 from public data only, profile timeline, an ecosystem radar of all 56 members, and a planted
 prompt-injection test proving that web text is treated as data.
 
+## Swedish / English
+
+The interface defaults to Swedish; the **SV / EN** switch in the header changes every label. Agent
+output (profiles, explanations, partner suggestions) is translated by a cached translation layer
+(`backend/radar/translate.py`), so each text is translated once. Vinnova calls use Vinnova's own Swedish
+titles; EU call titles stay in English (their official names). Pre-translate demo content with
+`python -m radar.pipeline translate`.
+
+## Email alerts (Notifier agent)
+
+On a company's **Bevakning / Alerts** tab a representative can opt in with an email address (explicit
+consent required). Radar then emails:
+
+- a welcome digest of the current top matches,
+- an alert for every *new* match at the chosen level (possible or strong) and types,
+- a reminder when a *saved* opportunity's deadline is within 14 days.
+
+Every email has a one-click unsubscribe link. Emails are always written to an outbox shown in Radar.
+They are only really sent when SMTP settings exist in `.env`; otherwise they are labelled simulated:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@example.com
+SMTP_PASSWORD=your_app_password
+ALERT_FROM=Radar <you@example.com>
+RADAR_APP_URL=http://localhost:3000
+```
+
+The Notifier runs after every `python -m radar.pipeline match` (or `python -m radar.pipeline notify`);
+in production a scheduler would run collect → match → notify daily.
+
 ## Agents
 
 | Agent | Model | Job |
@@ -38,6 +70,7 @@ prompt-injection test proving that web text is treated as data.
 | Guard | Llama Prompt Guard 2 + rules + gpt-oss-20b | Scope / unclear / unrelated / override / needs human / private data |
 | Concierge | gpt-oss-120b | Cited answers from the user's own profile and public data only |
 | Watcher | scheduled | Re-reads public pages, keeps the company's decisions, records changes |
+| Notifier | code + SMTP | Opt-in email alerts for new matches and deadline reminders |
 
 Boundaries are enforced in code, not only in prompts: the Concierge's context contains only the
 signed-in company's profile, public opportunities and public member descriptions.

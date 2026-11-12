@@ -1,15 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, GUARD_LABEL, host, type ChatResp } from "@/lib/api";
+import { api, host, type ChatResp } from "@/lib/api";
+import { useI18n, type Key } from "@/lib/i18n";
 
 type Msg = { role: "user" | "assistant"; text: string; resp?: ChatResp };
-
-const SUGGESTIONS = [
-  "Which open call fits us best, and what should we do before the deadline?",
-  "Is there a testbed in Karlskrona where we could run a pilot?",
-  "Which members could we talk to about a joint project?",
-];
 
 /** Minimal, safe formatting: **bold** and [O1]-style citation markers. No HTML injection. */
 function Rich({ text }: { text: string }) {
@@ -18,7 +13,7 @@ function Rich({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("**") && p.endsWith("**") ? <b key={i} style={{ fontWeight: 600 }}>{p.slice(2, -2)}</b>
-        : /^\[[OP]\d+\]$/.test(p) ? <sup key={i} className="mono" style={{ color: "var(--sea)", fontSize: 10 }}>{p}</sup>
+        : /^\[[OP]\d+\]$/.test(p) ? <sup key={i} style={{ color: "var(--brand-text)", fontSize: 10, fontWeight: 700 }}>{p}</sup>
         : <span key={i}>{p}</span>,
       )}
     </>
@@ -26,6 +21,7 @@ function Rich({ text }: { text: string }) {
 }
 
 export default function ChatDrawer({ slug, name, open, onClose }: { slug: string; name: string; open: boolean; onClose: () => void }) {
+  const { t, lang } = useI18n();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,10 +37,10 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
     setText("");
     setBusy(true);
     try {
-      const r = await api<ChatResp>(`/api/companies/${slug}/chat`, { method: "POST", body: JSON.stringify({ message }) });
+      const r = await api<ChatResp>(`/api/companies/${slug}/chat`, { method: "POST", body: JSON.stringify({ message, lang }) });
       setMsgs((m) => [...m, { role: "assistant", text: r.answer, resp: r }]);
     } catch (e) {
-      setMsgs((m) => [...m, { role: "assistant", text: `Something went wrong: ${(e as Error).message}` }]);
+      setMsgs((m) => [...m, { role: "assistant", text: t("chat.error", { e: (e as Error).message }) }]);
     } finally {
       setBusy(false);
     }
@@ -56,56 +52,57 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
   }
 
   return (
-    <aside className={`drawer ${open ? "open" : ""}`} aria-hidden={!open} aria-label="Ask Radar">
+    <aside className={`drawer ${open ? "open" : ""}`} aria-hidden={!open} aria-label={t("co.ask")}>
       <div className="drawer-head">
         <div>
-          <div className="eyebrow">Ask Radar · for {name}</div>
-          <div style={{ fontSize: 12.5 }} className="muted">Science-park questions only. Answers cite their sources.</div>
+          <div style={{ fontWeight: 600 }}>{t("chat.title", { name })}</div>
+          <div style={{ fontSize: 12.5, opacity: 0.8 }}>{t("chat.sub")}</div>
         </div>
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn ghost small" onClick={clear}>Clear</button>
-          <button className="btn ghost small" onClick={onClose} aria-label="Close">✕</button>
+        <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+          <button className="btn ghost small" onClick={clear}>{t("chat.clear")}</button>
+          <button className="btn ghost small" onClick={onClose} aria-label={t("chat.close")}>✕</button>
         </div>
       </div>
       <div className="chat-log" ref={logRef}>
         {!msgs.length && (
           <div className="stack">
-            <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>Try one of these — or test the limits on purpose.</p>
-            {SUGGESTIONS.map((s) => (
-              <button key={s} className="btn ghost small" style={{ textAlign: "left", justifyContent: "flex-start" }} onClick={() => send(s)}>{s}</button>
+            <p className="muted small" style={{ margin: 0 }}>{t("chat.try")}</p>
+            {(["chat.s1", "chat.s2", "chat.s3"] as Key[]).map((k) => (
+              <button key={k} className="btn ghost small" style={{ textAlign: "left", justifyContent: "flex-start", width: "100%" }} onClick={() => send(t(k))}>{t(k)}</button>
             ))}
           </div>
         )}
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
             {m.resp && m.resp.guard.category !== "relevant" && (
-              <div className="guard"><span className={`tag ${m.resp.guard.category === "unclear" ? "sea" : "bad"}`}>{GUARD_LABEL[m.resp.guard.category]}</span></div>
+              <div style={{ marginBottom: 6 }}>
+                <span className={`pill ${m.resp.guard.category === "unclear" ? "brand" : "danger"}`}>{t(`guard.${m.resp.guard.category}` as Key)}</span>
+              </div>
             )}
             <div style={{ whiteSpace: "pre-wrap" }}>{m.role === "assistant" ? <Rich text={m.text} /> : m.text}</div>
-            {m.resp?.next_step && <div style={{ marginTop: 8, fontSize: 13 }}><span className="eyebrow">Next step </span>{m.resp.next_step}</div>}
+            {m.resp?.next_step && <div style={{ marginTop: 8, fontSize: 13 }}><b>{t("feed.next")}:</b> {m.resp.next_step}</div>}
             {m.resp?.refer_to_staff && (
-              <div style={{ marginTop: 8 }}>
-                <a className="btn small" href="https://www.bluesciencepark.se/kontakt/kontaktpersoner/" target="_blank" rel="noreferrer">Contact Blue Science Park staff ↗</a>
+              <div style={{ marginTop: 10 }}>
+                <a className="btn small" href="https://www.bluesciencepark.se/kontakt/kontaktpersoner/" target="_blank" rel="noreferrer">{t("chat.staff")} ↗</a>
               </div>
             )}
             {!!m.resp?.citations.length && (
-              <div style={{ marginTop: 10, borderTop: "1px dotted var(--rule-strong)", paddingTop: 6 }}>
+              <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
                 {m.resp.citations.map((c) => (
                   <div key={c.ref} className="stamp" style={{ display: "flex" }}>
-                    <span>[{c.ref}]</span>
-                    <a href={c.url} target="_blank" rel="noreferrer">{c.title.slice(0, 70)}{c.title.length > 70 ? "…" : ""} · {host(c.url)} ↗</a>
-                    {c.date && <span>{c.date.slice(0, 10)}</span>}
+                    <b style={{ color: "var(--brand-text)" }}>[{c.ref}]</b>
+                    <a href={c.url} target="_blank" rel="noreferrer">{c.title.slice(0, 64)}{c.title.length > 64 ? "…" : ""} · {host(c.url)} ↗</a>
                   </div>
                 ))}
               </div>
             )}
           </div>
         ))}
-        {busy && <div className="msg assistant muted mono">Guard checking · Concierge reading…</div>}
+        {busy && <div className="msg assistant muted small">{t("chat.busy")}</div>}
       </div>
       <form className="chat-form" onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask about funding, events, testbeds, partners…" aria-label="Message" />
-        <button className="btn" disabled={busy || !text.trim()}>Send</button>
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("chat.placeholder")} aria-label={t("chat.placeholder")} />
+        <button className="btn" disabled={busy || !text.trim()}>{t("chat.send")}</button>
       </form>
     </aside>
   );

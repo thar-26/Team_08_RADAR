@@ -1,46 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { KindTag, When } from "@/components/ui";
-import { api, API, fmtDate, host, type Explanation, type FeedItem } from "@/lib/api";
+import { KindPill, When } from "@/components/ui";
+import { api, API, fmtDate, host, withLang, type Explanation, type FeedItem } from "@/lib/api";
+import { useI18n, type Key } from "@/lib/i18n";
 
-const FILTERS = [
-  ["all", "Everything"],
-  ["funding", "Funding"],
-  ["event", "Events"],
-  ["testbed", "Testbeds"],
-] as const;
-
-const COMPONENT_LABEL: Record<string, string> = {
-  semantic: "Fit with your profile",
-  priority: "Your stated priorities",
-  type_preference: "Type you asked for",
-  feedback: "Your feedback",
-  eligibility_conflict: "Eligibility conflict",
-  deadline_pressure: "Deadline very close",
-};
+const FILTERS = ["all", "funding", "event", "testbed"] as const;
+const COMPONENTS = ["semantic", "priority", "type_preference", "feedback", "eligibility_conflict", "deadline_pressure"];
 
 export default function FeedTab({ slug, items, onFeedback, toast }: {
   slug: string; items: FeedItem[]; onFeedback: () => void; toast: (m: string) => void;
 }) {
-  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
+  const { t } = useI18n();
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const shown = items.filter((i) => filter === "all" || i.opportunity.kind === filter);
-  const counts = Object.fromEntries(FILTERS.map(([k]) => [k, k === "all" ? items.length : items.filter((i) => i.opportunity.kind === k).length]));
+  const count = (k: string) => (k === "all" ? items.length : items.filter((i) => i.opportunity.kind === k).length);
 
   return (
     <div>
-      <div className="row" style={{ margin: "20px 0 4px" }}>
-        {FILTERS.map(([k, l]) => (
-          <button key={k} className={`btn small ${filter === k ? "" : "ghost"}`} onClick={() => setFilter(k)}>
-            {l} <span className="mono" style={{ opacity: 0.7 }}>{counts[k]}</span>
-          </button>
-        ))}
-        <span className="mono muted" style={{ marginLeft: "auto" }}>Possible matches — not eligibility decisions</span>
+      <div className="spread" style={{ marginTop: 22 }}>
+        <div className="seg" role="group">
+          {FILTERS.map((k) => (
+            <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
+              {t(`feed.${k}` as Key)}<span className="count">{count(k)}</span>
+            </button>
+          ))}
+        </div>
+        <span className="muted small">{t("feed.disclaimer")}</span>
       </div>
-      {shown.map((it, i) => (
-        <FeedCard key={it.opportunity.id} slug={slug} item={it} rank={i + 1} onFeedback={onFeedback} toast={toast} />
-      ))}
-      {!shown.length && <p className="muted" style={{ padding: "30px 0" }}>Nothing in this category right now.</p>}
+      <div className="feed">
+        {shown.map((it, i) => (
+          <FeedCard key={it.opportunity.id} slug={slug} item={it} rank={i + 1} onFeedback={onFeedback} toast={toast} />
+        ))}
+      </div>
+      {!shown.length && <p className="muted" style={{ padding: "30px 0" }}>{t("feed.empty")}</p>}
     </div>
   );
 }
@@ -48,16 +41,17 @@ export default function FeedTab({ slug, items, onFeedback, toast }: {
 function FeedCard({ slug, item, rank, onFeedback, toast }: {
   slug: string; item: FeedItem; rank: number; onFeedback: () => void; toast: (m: string) => void;
 }) {
+  const { t, lang } = useI18n();
   const o = item.opportunity;
-  const [exp, setExp] = useState<Explanation | null>(item.explanation);
+  const [fresh, setFresh] = useState<Explanation | null>(null);
+  const exp = fresh ?? item.explanation;
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const fit = Math.max(0, Math.min(1, item.score));
 
   async function explain() {
     setLoading(true);
     try {
-      setExp(await api<Explanation>(`/api/companies/${slug}/explain/${encodeURIComponent(o.id)}`, { method: "POST" }));
+      setFresh(await api<Explanation>(withLang(`/api/companies/${slug}/explain/${encodeURIComponent(o.id)}`, lang), { method: "POST" }));
     } finally {
       setLoading(false);
     }
@@ -65,80 +59,79 @@ function FeedCard({ slug, item, rank, onFeedback, toast }: {
   async function fb(value: "up" | "down" | "saved") {
     const undo = item.feedback.includes(value);
     await api(`/api/companies/${slug}/feedback`, { method: "POST", body: JSON.stringify({ opp_id: o.id, value, undo }) });
-    toast(value === "saved" ? (undo ? "Removed from saved" : "Saved") : value === "down" ? "Hidden — similar items move down" : undo ? "Feedback removed" : "Thanks — similar items move up");
+    toast(value === "saved" ? t(undo ? "toast.unsaved" : "toast.saved") : value === "down" ? t("toast.down") : t(undo ? "toast.removed" : "toast.up"));
     onFeedback();
   }
 
+  const fitCls = exp?.relevance === "strong" ? "gold" : exp?.relevance === "possible" ? "brand" : "outline";
   return (
-    <article className="feed-item">
+    <article className={`feed-card ${rank === 1 ? "top" : ""}`}>
       <div>
-        <div className="feed-rank">{String(rank).padStart(2, "0")}</div>
-        <div className="fitbar" title={`Ranking score ${item.score.toFixed(2)}`}><i style={{ width: `${fit * 100}%` }} /></div>
+        <div className="rank">{rank}</div>
+        <div className="fit" title={`${item.score.toFixed(2)}`}><i style={{ width: `${Math.max(0, Math.min(1, item.score)) * 100}%` }} /></div>
       </div>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
-          <KindTag kind={o.kind} />
-          {exp && !exp.error && <span className={`tag ${exp.relevance === "strong" ? "confirmed" : exp.relevance === "possible" ? "" : "inferred"}`}>{exp.relevance} fit</span>}
-          {o.simulated && <span className="tag sim">Simulated</span>}
-          <span className="mono muted">{o.source_name}{o.programme && o.source === "eu" ? ` · ${o.programme}` : ""}</span>
+          <KindPill kind={o.kind} />
+          {exp && !exp.error && <span className={`pill ${fitCls}`}>{t(`fit.${exp.relevance}` as Key)}</span>}
+          {o.simulated && <span className="pill warn">{t("prof.simulated")}</span>}
+          <span className="muted small">{o.source_name}</span>
         </div>
-        <h3 style={{ marginTop: 10 }}>
-          <a href={o.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>{o.title}</a>
-        </h3>
+        <a className="feed-title" href={o.url} target="_blank" rel="noreferrer">{o.title}</a>
         <div className="meta">
           <When o={o} />
-          {o.location_mode && o.kind === "event" && <span>{o.location_mode.replace("_", " ")}{o.location ? ` · ${o.location}` : ""}</span>}
-          <span>source <a href={o.url} target="_blank" rel="noreferrer">{host(o.url)} ↗</a></span>
-          <span>retrieved {fmtDate(o.fetched_at)}</span>
+          {o.kind === "event" && o.location_mode && o.location_mode !== "unknown" && <span>{t(`mode.${o.location_mode}` as Key)}{o.location ? ` · ${o.location}` : ""}</span>}
+          <span>{t("feed.source")} <a href={o.url} target="_blank" rel="noreferrer">{host(o.url)} ↗</a></span>
+          <span>{t("feed.retrieved", { date: fmtDate(o.fetched_at, lang) })}</span>
         </div>
 
         {exp && !exp.error ? (
           <>
             <div className="why">{exp.why}</div>
-            {exp.next_step && <div style={{ fontSize: 13.5 }}><span className="eyebrow" style={{ marginRight: 8 }}>Next step</span>{exp.next_step}</div>}
-            <button className="btn ghost small" style={{ marginTop: 12 }} onClick={() => setOpen(!open)} aria-expanded={open}>
-              {open ? "Hide" : "Show"} requirements & ranking
-            </button>
+            {exp.next_step && <div style={{ fontSize: 14 }}><b>{t("feed.next")}:</b> {exp.next_step}</div>}
             {open && (
-              <div style={{ marginTop: 12, display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+              <div style={{ marginTop: 14, display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
                 <div>
-                  <div className="eyebrow" style={{ marginBottom: 6 }}>Requirement check · indicative only</div>
+                  <div className="panel-title">{t("feed.reqs")}</div>
                   {exp.requirements.map((r, i) => (
                     <div className="req" key={i}>
-                      <span className={`req-icon ${r.status}`} aria-label={r.status}>{r.status === "likely_met" ? "✓" : r.status === "unknown" ? "?" : "✕"}</span>
-                      <span><b style={{ fontWeight: 500 }}>{r.requirement}</b><br /><span className="muted">{r.basis}</span></span>
+                      <span className={`req-icon ${r.status}`} title={t(`req.${r.status}` as Key)}>{r.status === "likely_met" ? "✓" : r.status === "unknown" ? "?" : "✕"}</span>
+                      <span><b style={{ fontWeight: 600 }}>{r.requirement}</b><br /><span className="muted">{r.basis}</span></span>
                     </div>
                   ))}
-                  {exp.uncertainties.length > 0 && (
-                    <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>Uncertain: {exp.uncertainties.join(" · ")}</p>
-                  )}
+                  {exp.uncertainties.length > 0 && <p className="muted small" style={{ marginTop: 10 }}>{t("feed.uncertain")}: {exp.uncertainties.join(" · ")}</p>}
                 </div>
                 <div>
-                  <div className="eyebrow" style={{ marginBottom: 6 }}>Why it ranks #{rank}</div>
-                  {Object.entries(item.components).filter(([k, v]) => k in COMPONENT_LABEL && v !== 0).map(([k, v]) => (
-                    <div key={k} className="spread" style={{ fontSize: 13.5, padding: "4px 0", borderTop: "1px dotted var(--rule)" }}>
-                      <span>{COMPONENT_LABEL[k]}</span>
-                      <span className="mono" style={{ color: v < 0 ? "var(--signal)" : "var(--ink)" }}>{v > 0 ? "+" : ""}{v.toFixed(2)}</span>
+                  <div className="panel-title">{t("feed.whyRank", { n: rank })}</div>
+                  {Object.entries(item.components).filter(([k, v]) => COMPONENTS.includes(k) && v !== 0).map(([k, v]) => (
+                    <div key={k} className="spread" style={{ fontSize: 13.5, padding: "6px 0", borderTop: "1px solid var(--line)" }}>
+                      <span>{t(`comp.${k}` as Key)}</span>
+                      <b style={{ color: v < 0 ? "var(--danger)" : "var(--brand-text)" }}>{v > 0 ? "+" : ""}{v.toFixed(2)}</b>
                     </div>
                   ))}
-                  {item.anchor_claim && <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Closest profile line: “{item.anchor_claim}”</p>}
+                  {item.anchor_claim && <p className="muted small" style={{ marginTop: 8 }}>{t("feed.closest")}: “{item.anchor_claim}”</p>}
                 </div>
               </div>
             )}
           </>
         ) : (
-          <div style={{ marginTop: 12 }}>
-            <p className="muted" style={{ fontSize: 14, margin: "0 0 8px" }}>{o.summary.slice(0, 220)}{o.summary.length > 220 ? "…" : ""}</p>
-            <button className="btn ghost small" onClick={explain} disabled={loading}>{loading ? "Matcher is reading…" : "Explain this match"}</button>
+          <div style={{ marginTop: 10 }}>
+            <p className="muted" style={{ fontSize: 14, margin: "0 0 10px" }}>{o.summary.slice(0, 220)}{o.summary.length > 220 ? "…" : ""}</p>
+            <button className="btn soft small" onClick={explain} disabled={loading}>{loading ? t("feed.explaining") : t("feed.explain")}</button>
           </div>
         )}
 
-        <div className="row" style={{ marginTop: 14, gap: 6 }}>
-          <button className={`btn icon small ghost ${item.feedback.includes("up") ? "on" : ""}`} onClick={() => fb("up")} aria-label="Relevant">▲ Relevant</button>
-          <button className="btn icon small ghost" onClick={() => fb("down")} aria-label="Not relevant">▼ Not for us</button>
-          <button className={`btn icon small ghost ${item.feedback.includes("saved") ? "on" : ""}`} onClick={() => fb("saved")}>{item.feedback.includes("saved") ? "★ Saved" : "☆ Save"}</button>
-          {(o.deadline || o.event_date) && <a className="btn icon small ghost" href={`${API}/api/opportunities/${encodeURIComponent(o.id)}/ics`}>+ Calendar</a>}
-          {o.apply_url && o.apply_url !== o.url && <a className="btn icon small ghost" href={o.apply_url} target="_blank" rel="noreferrer">Apply page ↗</a>}
+        <div className="actions">
+          <button className={`btn ghost small ${item.feedback.includes("up") ? "on" : ""}`} onClick={() => fb("up")}>👍 {t("feed.relevant")}</button>
+          <button className="btn ghost small" onClick={() => fb("down")}>👎 {t("feed.notForUs")}</button>
+          <button className={`btn ghost small ${item.feedback.includes("saved") ? "on" : ""}`} onClick={() => fb("saved")}>{item.feedback.includes("saved") ? `★ ${t("feed.saved")}` : `☆ ${t("feed.save")}`}</button>
+          {(o.deadline || o.event_date) && <a className="btn ghost small" href={`${API}/api/opportunities/${encodeURIComponent(o.id)}/ics`}>📅 {t("feed.calendar")}</a>}
+          {o.apply_url && o.apply_url !== o.url && <a className="btn ghost small" href={o.apply_url} target="_blank" rel="noreferrer">{t("feed.apply")} ↗</a>}
+          {exp && !exp.error && (
+            <button className="btn ghost small" style={{ marginLeft: "auto" }} onClick={() => setOpen(!open)} aria-expanded={open}>
+              {open ? t("feed.hide") : t("feed.show")}
+            </button>
+          )}
         </div>
       </div>
     </article>

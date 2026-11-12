@@ -136,6 +136,10 @@ def session() -> Iterator[sqlite3.Connection]:
 def init() -> None:
     with session() as c:
         c.executescript(SCHEMA)
+        # Lightweight migrations for databases created by earlier versions.
+        cols = {r[1] for r in c.execute("PRAGMA table_info(opportunities)").fetchall()}
+        if "title_sv" not in cols:
+            c.execute("ALTER TABLE opportunities ADD COLUMN title_sv TEXT")
 
 
 def rows(sql: str, params: tuple | list = ()) -> list[dict[str, Any]]:

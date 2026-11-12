@@ -48,7 +48,8 @@ def collect_vinnova() -> int:
             "opportunities",
             {
                 "id": f"vinnova:{r['Diarienummer']}",
-                "kind": "funding", "source": "vinnova", "title": title, "summary": summary[:1200],
+                "kind": "funding", "source": "vinnova", "title": title, "title_sv": r.get("Titel") or title,
+                "summary": summary[:1200],
                 "eligibility_text": _clean(who)[:1500],
                 # Prefer Vinnova's own page about the call, then the public call page in
                 # Vinnova's application portal, then the open-data record itself.

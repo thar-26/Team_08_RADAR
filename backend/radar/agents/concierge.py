@@ -88,7 +88,33 @@ def _context(slug: str) -> tuple[str, dict]:
     return "\n".join(lines), refs
 
 
-def respond(slug: str, message: str) -> dict:
+TEMPLATES_SV = {
+    "unrelated": (
+        "Jag är Radar, Blue Science Parks assistent för möjligheter, finansiering, evenemang, testbäddar och partner i parken, "
+        "så det kan jag tyvärr inte hjälpa till med. Jag kan till exempel visa vilka öppna utlysningar som passar ert företag, "
+        "hitta en testbädd för en pilot eller föreslå medlemmar ni kan prata med."
+    ),
+    "override_attempt": (
+        "Jag kan inte ändra min roll eller mina regler, och jag delar inte interna instruktioner eller andra företags data. "
+        "Jag finns här för att hjälpa ert företag hitta finansiering, evenemang, testbäddar och partner i Blue Science Parks "
+        "ekosystem — vad vill ni utforska?"
+    ),
+    "other_company_private": (
+        "Jag kan inte dela ett annat företags icke-offentliga information, som deras ändringar, sparade objekt eller samtal. "
+        "Jag kan berätta vad som är offentligt känt om andra medlemmar och föreslå möjliga samarbeten utifrån offentlig information."
+    ),
+    "needs_human": (
+        "Det kräver ett beslut av Blue Science Parks personal, så det kan jag inte lova. "
+        f"Kontakta teamet via {STAFF_CONTACT}. Jag kan hjälpa er att förbereda: sammanfatta möjligheten, er profil och öppna frågor."
+    ),
+}
+CLARIFY_FALLBACK = {
+    "sv": "Kan du berätta hur frågan hänger ihop med ert företags innovation eller affärsutveckling?",
+    "en": "Could you say how this relates to your company's innovation or business development?",
+}
+
+
+def respond(slug: str, message: str, lang: str = "en") -> dict:
     history = db.rows(
         "SELECT role, content FROM chat_log WHERE company_slug=? ORDER BY id DESC LIMIT 6", (slug,)
     )[::-1]
@@ -99,18 +125,23 @@ def respond(slug: str, message: str) -> dict:
     if cat == "relevant":
         context, refs = _context(slug)
         hist = "\n".join(f"{h['role']}: {h['content'][:400]}" for h in history)
+        lang_rule = "Answer in Swedish (svenska)." if lang == "sv" else "Answer in English."
         ans = llm.structured(
-            ConciergeAnswer, SYSTEM.format(today=today().isoformat()),
+            ConciergeAnswer, SYSTEM.format(today=today().isoformat()) + "\n- " + lang_rule + " If the user clearly writes in the other language, use theirs.",
             f"CONTEXT:\n{context}\n\nCONVERSATION SO FAR:\n{hist or '(none)'}\n\nQUESTION:\n{message}",
             model=MODEL_REASONING, reasoning_effort="low", use_cache=False,
         )
         cites = [refs[c.ref] | {"ref": c.ref} for c in ans.citations if c.ref in refs]
         out = {"answer": ans.answer, "citations": cites, "next_step": ans.next_step, "refer_to_staff": ans.refer_to_staff}
     elif cat == "unclear":
-        out = {"answer": verdict["clarifying_question"] or "Could you say how this relates to your company's innovation or business development?",
-               "citations": [], "next_step": "", "refer_to_staff": False}
+        q = verdict["clarifying_question"]
+        if q and lang == "sv":
+            from ..translate import translate
+
+            q = translate([q], "sv")[0]
+        out = {"answer": q or CLARIFY_FALLBACK[lang], "citations": [], "next_step": "", "refer_to_staff": False}
     else:
-        out = {"answer": TEMPLATES[cat], "citations": [], "next_step": "", "refer_to_staff": cat == "needs_human",
+        out = {"answer": (TEMPLATES_SV if lang == "sv" else TEMPLATES)[cat], "citations": [], "next_step": "", "refer_to_staff": cat == "needs_human",
                "staff_contact": STAFF_CONTACT if cat == "needs_human" else ""}
     out["guard"] = verdict
     db.execute("INSERT INTO chat_log (company_slug, role, content, verdict, created_at) VALUES (?,?,?,?,?)",
