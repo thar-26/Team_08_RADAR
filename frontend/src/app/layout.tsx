@@ -14,7 +14,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="sv">
+    // Browser translation (e.g. Chrome Translate) rewrites lang/class on <html>
+    // before React loads; tolerate that on this one element only.
+    <html lang="sv" suppressHydrationWarning>
       <body className={roboto.variable}>
         <LangProvider>
           <a className="skip" href="#main">Hoppa till innehållet / Skip to content</a>
