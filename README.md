@@ -1,37 +1,112 @@
 # Radar: a Virtual Science Park for Blue Science Park
 
-AI agents that build an evidence-backed profile of each Blue Science Park member from public sources,
-watch Swedish and EU funding, events and testbeds, and explain, with a source link and date on every
-claim, why an opportunity matters to that company and how well it fits (an indicative 1–10 score).
+Radar helps companies in the Blue Science Park ecosystem in Karlskrona find funding, events, testbeds and
+partners across Sweden and Europe. AI agents build an evidence-backed profile of each member from public
+sources, watch Swedish and EU opportunities, and explain, with a source link and date on every claim, why
+an opportunity matters to that company and how well it fits (an indicative 1–10 score).
 
-Built for the BUILD Hackathon 2026 (Karlskrona, 13–15 November), challenge "Virtual Science Park" by
-Blue Science Park. A prototype from the hackathon, not an official Blue Science Park service.
+Built for **BUILD Hackathon 2026** (Karlskrona, 13–15 November), challenge *Virtual Science Park* by
+Blue Science Park.
 
-## What was built when
+> A prototype from BUILD Hackathon 2026 in Karlskrona. Not an official Blue Science Park service.
 
-| | What |
+---
+
+## Contents
+
+1. [What Radar does](#what-radar-does)
+2. [Challenge requirements](#challenge-requirements)
+3. [Roles, sign-in and privacy](#roles-sign-in-and-privacy)
+4. [How the fit score works](#how-the-fit-score-works)
+5. [Agents](#agents)
+6. [Tech stack and project structure](#tech-stack-and-project-structure)
+7. [Setup](#setup)
+8. [Running Radar](#running-radar)
+9. [Five-minute demo](#five-minute-demo)
+10. [Tests and quality checks](#tests-and-quality-checks)
+11. [Data sources](#data-sources)
+12. [What was built when](#what-was-built-when)
+13. [Known limits and next steps](#known-limits-and-next-steps)
+
+---
+
+## What Radar does
+
+**For every member company**
+- A **profile** built from public sources (the company's website, its Blue Science Park member page,
+  Wikipedia for the large groups, Bolagsverket). Every statement is either a *fact* with a verbatim quote,
+  link and retrieval date, or an *inference* with its reasoning. The Verifier checks every quote word for word.
+- A **personal feed** of funding calls, events and testbeds with an indicative **1–10 fit score**, a
+  plain-language **"Why this match?"**, what is **missing or uncertain**, a requirement check, the
+  funder's named contacts and a concrete **next step**. Top 10 first, "show more" for the rest.
+- **Possible partners** among the other members, from public information only.
+- **Ask Radar**, a Concierge chat that answers with citations and stays within its remit
+  (it refuses unrelated requests and attempts to override its rules).
+- **Profile history** and **email alerts** (instant or a weekly digest).
+
+**Across the park**
+- **Members**: all 56 members; search them by expertise ("marine sensor technology"); anyone can
+  click **Profile member** to build a profile for a member that has none.
+- **Event filters** by region, city and format; **national testbeds** (Vinnova open data plus a
+  hand-verified list) next to the testbeds at Marine Technology Center in Karlskrona.
+- Swedish by default, with a full **SV / EN** switch.
+
+**Two views for the demo** (chosen on the start screen, see below)
+- **Blue Science Park:** a **Park overview** (`/park`) with every profiled member's strong and possible
+  matches, nearest deadline and best match, and **Who does this opportunity fit?**: pick a call,
+  event or testbed, see which members it fits best and **Send tip**.
+- **Member company:** **My radar** in the menu, **This week and next** (the company's upcoming deadlines
+  and events) and **Tips from Blue Science Park** on its page.
+
+## Challenge requirements
+
+| Requirement | Where in Radar |
 |---|---|
-| **Before the hackathon** (12 Nov, team kick-off and practice, allowed by the organisers) | Data collection, the ten agents, member profiles with fact/inferred labels and verification, ranking, the Concierge and Guard, Swedish/English interface in Blue Science Park's visual language, email alerts, profile corrections with Google sign-in, Bolagsverket company facts, Postgres support |
-| **During the hackathon** (from 13 Nov) | Explainable 1–10 fit score with reasons and missing information; national testbeds (Vinnova open data + a hand-verified list); member search by expertise and cross-company Concierge questions; event filters by region, city and format; weekly digest with a scheduler and rehearsal safety; evidence page (team relevance ratings, measured model usage); two new safety tests; demo reset command; faster page loads |
-| **Reused, not built by us** | Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq (gpt-oss-120b/20b, Llama Prompt Guard 2), a multilingual embedding model, public APIs and data (below), Blue Science Park's colours and typography as a visual reference |
-
-## What it does
-
-| Brief requirement | Where in Radar |
-|---|---|
-| Baseline profiles for ≥3 companies from public sources | 6 members profiled (Techinova, Ocean Harvesting, EmbeddedArt, Ericsson, Saab, 3D Vision); staff can profile any of the 56 |
-| Evidence; facts vs inferred interests | Every statement is *fact* (verbatim quote + link + retrieval date) or *inferred* (with reasoning). The **Verifier** checks every quote word for word. Bolagsverket registry facts are labelled as such |
-| Review and refine a profile | **Profile** tab: a signed-in member of the company (or park staff) can confirm, edit, mark outdated or add priorities. Who and when is recorded; the feed re-ranks |
-| ≥2 public opportunity sources | Vinnova, EU Funding & Tenders, event calendars (Vinnova, BTH, AI Sweden, Region Blekinge, SISP, Blue Science Park, Tech Concept Lab, Almi, NetPort), MTC testbeds, national testbeds |
-| Different rankings per profile | Mean top-10 overlap between members is low (see **Quality & safety**) |
+| Baseline profiles for ≥3 companies from public sources | 7 members profiled in our demo database (Ocean Harvesting, Techinova, 3D Vision, EmbeddedArt, Ericsson, Saab, NKT); any of the 56 can be profiled from **Members** |
+| Evidence; facts vs inferred interests | Each statement is a fact (quote + link + date, verified word for word) or inferred (with reasoning); "Possible interests" are always inferred; Bolagsverket facts are labelled |
+| Review and refine a profile | **Profile** tab: confirm, edit, mark outdated, add priorities. Name and date are recorded; the feed re-ranks |
+| ≥2 public opportunity sources | Vinnova, EU Funding & Tenders, nine event calendars, Marine Technology Center, national testbeds |
+| Different rankings per profile | Mean top-10 overlap between members about 8.5% (`python -m radar.evals`) |
 | Source links and dates | On every claim, opportunity and chat citation |
-| Relevant / unrelated / override requests | 3-layer **Guard**; 17-case boundary suite incl. staff impersonation and a hidden instruction in a pasted document |
-| Label simulated data | The simulated test company and preview-only emails are labelled |
+| Relevant / unrelated / override requests | Three-layer **Guard**; 17-case boundary suite (all pass), including staff impersonation and a hidden instruction in a pasted document |
+| Label simulated data | Simulated sign-in, simulated test company, simulated tips and preview-only emails are labelled |
 
-### The fit score (1–10)
+The **Quality & safety** page (footer) shows these checks live, including a box to test the Guard.
 
-Each opportunity gets an **indicative** score, not a probability. Five factors, each 0–1, with
-provisional weights to calibrate with park staff:
+## Roles, sign-in and privacy
+
+**Start screen (simulated sign-in).** On the first visit Radar asks who is using it: *Blue Science Park*
+or *a member company*. This is a simulation for the demo (a real sign-in takes too long in a five-minute
+pitch). It only chooses the view; it grants no rights. The header shows the simulated view
+("Simulated: Ocean Harvesting") and lets you switch.
+
+**Real sign-in (Google)** is needed to change a profile or see a company's private data.
+
+| | Visitor / simulated view | Company member (signed in) | Blue Science Park staff (signed in) |
+|---|---|---|---|
+| Public profiles, matches, events, testbeds, partners, Concierge | yes | yes | yes |
+| Profile a member that has no profile yet | yes | yes | yes |
+| Correct a profile, add priorities, make a priority public | no | own company | every company |
+| Private priorities, saved items, feedback, alerts, email previews | no | own company | every company |
+| Approve or reject access requests (Account page) | no | no | yes |
+
+- **Staff** are the addresses listed in `RADAR_STAFF_EMAILS`.
+- **Company access** is granted automatically only when the email domain is exactly the company's website
+  domain (or an approved alias, e.g. `saabgroup.com` for Saab). Look-alike domains and free mail
+  (Gmail, Outlook…) become a request that staff approve.
+- **Private by default:** priorities a company adds are private until it chooses *Make public*. Visitors
+  see recommendations ranked on the public profile only, and the shared written explanations are
+  generated from public information only, so private priorities cannot leak through them.
+- **Chats** belong to one visitor (browser session) or to the company's members; nobody sees anyone
+  else's conversation.
+- All of this is enforced in the API (`backend/radar/api.py`, `auth.py`) and tested in
+  `backend/tests/test_privacy.py`, including "change the company in the URL".
+- Without a configured login provider, nobody can edit.
+
+## How the fit score works
+
+Each opportunity gets an **indicative** score from 1 to 10, not a probability. Five factors, each 0–1,
+with provisional weights to calibrate with park staff:
 
 | Factor | Weight | From |
 |---|---|---|
@@ -42,143 +117,227 @@ provisional weights to calibrate with park staff:
 | Timing | 10% | Days to the deadline or event |
 
 Technical fit gates the rest, so a nearby event that has nothing to do with the company stays low.
-Where the Matcher has read the full texts, its strong/possible/weak judgement is 30% of the final
-score. Labels: strong ≥ 7.0, possible ≥ 4.5. Every card shows **Why this match?** in plain language
-(tied to a profile statement and its basis) and **Missing or uncertain** information. The feed shows
-the top 10 with "show more".
-
-### More
-
-- **National testbeds**: Testbed Sweden and ri.se refuse automated access, so Radar does not read them.
-  It uses Vinnova open data (ongoing, publicly funded testbed projects) and 8 testbeds checked by hand
-  against their official pages (`data/national_testbeds.json`, labelled "Manually verified").
-  Availability is never confirmed.
-- **Collaboration**: search members by expertise on **Members**; the Concierge answers questions such
-  as "Which members could collaborate with us on marine sensor technology?" from public descriptions
-  only and states that no one has agreed to anything. Partner cards link to the partner's Radar profile.
-- **Events**: filters by region (Blekinge, Stockholm, Västra Götaland, Skåne, elsewhere in Sweden,
-  abroad, online, unknown), city and format. Unknown locations are shown as such.
-- **Weekly digest** (Notifier): instant or weekly, manual "send now", unsubscribe link, preview of
-  every email, a database lock against duplicate sending.
-- **Evidence** (`/evidence`): the team rates the top 10 for demo companies (hit rate), and every model
-  call is logged with tokens and time. No prices are invented.
-
-## Sign-in, roles and privacy
-
-- **Start screen (simulated):** on the first visit Radar asks whether you are Blue Science Park or a member
-  company and opens that view. This is a simulation for the demo: it grants no rights. The header shows the
-  simulated view and lets you switch.
-- **Real sign-in (Google)** is needed to change a profile or see a company's private data. Blue Science Park
-  staff are the addresses in `RADAR_STAFF_EMAILS` and can see and edit everything and approve access requests
-  (Account page). Company access is granted automatically only for the exact email domain of the company's
-  website (or an approved alias, e.g. saabgroup.com for Saab); anything else is a request staff approve.
-- **Private by default:** priorities a company adds, its saved items, feedback, alerts, email previews and
-  chats are only shown to its signed-in members and staff (enforced in the API, tested in
-  `backend/tests/test_privacy.py`). A company can choose to make an added priority public.
-- **Two simulated views with their own features:**
-  - *Blue Science Park*: **Park overview** (`/park`): each profiled member's strong and possible matches,
-    nearest deadline and best match, plus **Who does this opportunity fit?**: pick a call, event or testbed,
-    see the members it fits best (same 1–10 score) and **Send tip**.
-  - *Member company*: **My radar** in the menu, **This week and next** (its upcoming deadlines and events)
-    and **Tips from Blue Science Park** on its page. Tips are simulated: shown in Radar, no email is sent.
-- **Anyone** can profile a member that has no profile yet (public sources only); rebuilding an existing
-  profile is for the company or staff.
+Where the Matcher has read the full texts, its strong/possible/weak judgement counts for 30% of the
+final score. Labels: **strong ≥ 7.0**, **possible ≥ 4.5**, otherwise weak.
 
 ## Agents
 
 | Agent | Model | Job |
 |---|---|---|
-| Collector | code | Fetches sources politely (robots.txt, rate limit, cache); stores URL + retrieval time |
-| Profiler | gpt-oss-120b | Profile with fact/inferred labels, quotes, missing information |
-| Verifier | code | Quote must appear in the saved source, otherwise downgraded to inferred |
-| Scouts | gpt-oss-20b + APIs | Funding, events, testbeds; dates validated in code |
-| Matcher | embeddings + gpt-oss-120b | 1–10 fit score with reasons; LLM explains the top matches |
+| Collector | code | Fetches sources politely (robots.txt, rate limit, cache); stores URL and retrieval time |
+| Profiler | gpt-oss-120b | Profile with fact/inferred labels, quotes and missing information |
+| Verifier | code | A quote must appear in the saved source, otherwise the fact is downgraded to inferred |
+| Scouts | gpt-oss-20b + APIs | Funding, events and testbeds; dates validated in code |
+| Matcher | embeddings + gpt-oss-120b | 1–10 fit score with reasons; the LLM explains the top matches |
 | Connector | embeddings + gpt-oss-120b | Member search and partner suggestions from public data |
-| Guard | Llama Prompt Guard 2 + rules + gpt-oss-20b | Relevant / unclear / unrelated / override / needs human / private data |
+| Guard | Llama Prompt Guard 2 + rules + gpt-oss-20b | Relevant / unclear / unrelated / override / needs a human / another company's private data |
 | Concierge | gpt-oss-120b | Cited answers from the company's own profile and public data only |
 | Watcher | scheduled | Re-reads public pages, keeps the company's decisions, records changes |
-| Notifier | code + SMTP | Instant alerts or weekly digest, deadline reminders |
+| Notifier | code + SMTP | Instant alerts or a weekly digest, deadline reminders |
 
-Boundaries are enforced in code, not only in prompts: the Concierge's context contains only the
-company's own profile, public opportunities and public member descriptions.
+Boundaries are enforced in code, not only in prompts: the Concierge's context contains only what the
+caller may see.
+
+## Tech stack and project structure
+
+- **Backend:** Python 3.10+, FastAPI, SQLite (or Postgres via `DATABASE_URL`), Groq-hosted models,
+  local multilingual embeddings (fastembed), Playwright for JavaScript-rendered calendars.
+- **Frontend:** Next.js 15 (React, TypeScript), Auth.js (Google sign-in), Roboto, Blue Science Park's
+  colours as a visual reference.
+
+```
+radar/
+├── backend/
+│   ├── radar/
+│   │   ├── api.py            REST API used by the website
+│   │   ├── agents/           profiler, verifier, matcher, connector, guard, concierge, notifier, …
+│   │   ├── collectors/       members, websites, funding, events, testbeds, Bolagsverket
+│   │   ├── pipeline.py       collect → profile → match → translate
+│   │   ├── evals.py          quality and boundary report
+│   │   ├── evaluate_demo.py  writes docs/EVALUATION.md
+│   │   └── reset_demo.py     snapshot / restore for rehearsals
+│   ├── tests/                offline tests (throw-away database)
+│   └── requirements.txt
+├── frontend/
+│   └── src/app, src/components, src/lib   pages, components, API client, Swedish/English texts
+├── data/                     member list, hand-verified national testbeds, eval report
+│                             (the database, caches and models are created here, not committed)
+├── docs/EVALUATION.md        top matches for three demo companies + refinement test
+├── SOURCES.md                every data source, its endpoint and status
+├── start-radar.bat           one-click start on Windows
+└── .env.example              all settings, without values
+```
 
 ## Setup
 
-Requirements: Python 3.10+, Node.js 20+, a Groq API key. All secrets live in `.env` in the project
-root (never commit it).
+**Requirements:** Python 3.10 or newer, Node.js 20 or newer, Git, and a free
+[Groq](https://console.groq.com) API key. About 1 GB of disk space for the embedding model and the
+headless browser.
+
+### 1. Get the code and the settings file
 
 ```bash
-# Backend
+git clone <repository-url> radar
+cd radar
+```
+
+Copy `.env.example` to `.env` (in the `radar` folder) and fill in at least `GROQ_API_KEY`.
+Everything else is optional. **Never commit `.env`.**
+
+### 2. Backend
+
+Windows (Command Prompt):
+
+```
 cd backend
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt      # macOS/Linux: .venv/bin/pip
-.venv/Scripts/python -m playwright install chromium
-.venv/Scripts/python -m radar.pipeline all          # collect, profile, match
-.venv/Scripts/python -m uvicorn radar.api:app --port 8000
-
-# Frontend (new terminal)
-cd frontend
-npm install
-npm run dev                                          # http://localhost:3000
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python -m playwright install chromium
+.venv\Scripts\python -m radar.pipeline all
 ```
 
-`.env` settings:
-
-| Key | Purpose |
-|---|---|
-| `GROQ_API_KEY` | Models (required) |
-| `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Sign-in for profile corrections |
-| `RADAR_STAFF_EMAILS` | Comma-separated staff addresses that may edit any profile |
-| `BOLAGSVERKET_CLIENT_ID`, `BOLAGSVERKET_CLIENT_SECRET` | Company register facts |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERT_FROM`, `RADAR_APP_URL` | Real email sending |
-| `RADAR_MAIL_ALLOWLIST` | **Set this for rehearsals**: only these addresses get real email, all others get a preview |
-| `RADAR_SCHEDULER=1`, `RADAR_SCHEDULER_MINUTES=60` | Send digests automatically while the API runs |
-| `DATABASE_URL` | Use Postgres instead of SQLite |
-| `RADAR_TODAY` | Freeze "today" for a demo, e.g. `2026-11-14` |
-
-## Useful commands
-
-On Windows, double-click `start-radar.bat` to start the API and the website and open the browser.
+macOS / Linux:
 
 ```bash
-python -m radar.pipeline collect       # refresh all sources (incl. national testbeds)
-python -m radar.pipeline match         # re-rank and re-explain
-python -m radar.evals                  # quality & boundary report
-python -m radar.reset_demo --save      # save the current state as the demo snapshot
-python -m radar.reset_demo             # back to the snapshot between rehearsals (safe while the API runs)
-python -m pytest tests                 # offline tests (use a throw-away database)
-NEXT_DIST_DIR=.next-build npx next build   # production build next to a running dev server
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m radar.pipeline all
 ```
 
-`reset_demo` keeps caches, measured model usage and the team's relevance ratings.
+`radar.pipeline all` collects every source, profiles the five default demo companies (Techinova, Ocean
+Harvesting, EmbeddedArt, Ericsson, Saab), ranks and explains their matches and pre-translates them.
+The first run takes several minutes and downloads a ~220 MB multilingual embedding model into
+`data/models/`. Other members (e.g. 3D Vision, NKT) can then be profiled from the **Members** page.
 
-## Data sources (all public)
+### 3. Frontend
 
-Blue Science Park (members, events), member websites, Wikipedia (Ericsson, Saab), Bolagsverket
-(company register), Vinnova open data (calls and funded projects), EU Funding & Tenders, event
-calendars (see above), Marine Technology Center of Sweden, and the hand-verified national testbed list.
-See `SOURCES.md`.
+```bash
+cd frontend
+npm install
+```
 
-## Known limits
+### Settings (`.env`)
 
-- Some sites block automated reading (ericsson.com, ri.se, Testbed Sweden). Radar does not bypass blocks.
-- The fit score and its weights are provisional and not yet calibrated with staff or members.
+| Key | Needed for |
+|---|---|
+| `GROQ_API_KEY` | **Required.** The language models |
+| `AUTH_SECRET` | Signing sessions (any long random string) |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Google sign-in (profile corrections). Redirect URI: `http://localhost:3000/api/auth/callback/google` |
+| `RADAR_STAFF_EMAILS` | Comma-separated Blue Science Park staff addresses |
+| `RADAR_COMPANY_DOMAINS` | Extra approved email domains, e.g. `saab=saabgroup.com;techinova=techinova.com` |
+| `BOLAGSVERKET_CLIENT_ID`, `BOLAGSVERKET_CLIENT_SECRET` | Official company facts from Bolagsverket |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERT_FROM`, `RADAR_APP_URL` | Real email alerts (otherwise emails are previews in Radar) |
+| `RADAR_MAIL_ALLOWLIST` | **Set this for rehearsals:** only these addresses get real email |
+| `RADAR_SCHEDULER=1`, `RADAR_SCHEDULER_MINUTES` | Send digests automatically while the API runs |
+| `DATABASE_URL` | Use Postgres instead of the local SQLite file |
+| `RADAR_TODAY` | Freeze "today" for a demo, e.g. `2026-11-14` |
+
+## Running Radar
+
+**Windows, one click:** double-click `start-radar.bat`. It opens the API and the website in two
+windows and then opens http://localhost:3000. Close those two windows to stop Radar.
+
+**By hand**, in two terminals:
+
+```
+cd backend
+.venv\Scripts\python -m uvicorn radar.api:app --port 8000
+```
+
+```
+cd frontend
+npm run dev
+```
+
+Then open http://localhost:3000. (On macOS/Linux use `.venv/bin/python`.)
+
+**Useful commands** (in `backend/`, with the virtual environment's Python):
+
+```bash
+python -m radar.pipeline collect       # refresh all sources
+python -m radar.pipeline match         # re-rank and re-explain
+python -m radar.evals                  # quality and boundary report → data/eval_report.json
+python -m radar.evaluate_demo          # docs/EVALUATION.md
+python -m radar.reset_demo --save      # save the current state as the demo snapshot
+python -m radar.reset_demo             # back to the snapshot between rehearsals (safe while the API runs)
+python -m pytest tests                 # offline tests
+```
+
+`reset_demo` restores profiles, feedback, tips, chats and alerts, and keeps caches, measured model usage
+and the team's relevance ratings. Data is refreshed by running the pipeline, not live on every page view;
+every item shows when it was retrieved.
+
+## Five-minute demo
+
+1. Open Radar and choose **Blue Science Park** on the start screen. Show the **Park overview**: which
+   members have strong matches and deadlines coming up.
+2. Under **Who does this opportunity fit?**, pick the EU wave and tidal energy call. Ocean Harvesting
+   fits best. Click **Send tip**.
+3. Switch the view (header) to **Ocean Harvesting**. Show **Tips from Blue Science Park**, **This week
+   and next** and the feed: score, *Why this match?*, missing information, source and date, contact.
+4. Open the **Profile** tab: facts with verbatim quotes and links, inferred interests, what is missing.
+   Signed in as staff or a member, add a priority and watch the feed re-rank.
+5. **Ask Radar** a relevant question, then an unrelated one and an override attempt: it answers with
+   citations, then politely refuses.
+
+Before each rehearsal run `python -m radar.reset_demo` so the demo starts clean.
+
+## Tests and quality checks
+
+Measured on the submission version:
+
+- **26 offline tests pass** (`python -m pytest tests`): sign-in tokens and domain rules, privacy and
+  cross-company access, profile edits, Bolagsverket parsing, digest timing and duplicate protection,
+  demo reset, park tips.
+- **Evals** (`python -m radar.evals`): 17/17 boundary cases with no unsafe answer; the planted prompt
+  injection is flagged and ignored; every fact in the five default profiles has a verified quote;
+  mean top-10 overlap between companies about 8.5%; no SME-only calls in Ericsson's or Saab's top 10.
+- `docs/EVALUATION.md`: the top five matches for three smaller companies with source, date and
+  eligibility, and a refinement test (adding one priority changes 2–4 of the top 10). The
+  *team assessment* column is for people to fill in; Radar does not grade itself.
+
+## Data sources
+
+All public: Blue Science Park (members, events), member websites, Wikipedia (Ericsson, Saab),
+Bolagsverket (company register), Vinnova open data (calls and funded testbed projects),
+EU Funding & Tenders, event calendars (Vinnova, BTH, AI Sweden, Region Blekinge, SISP,
+Blue Science Park, Tech Concept Lab, Almi, NetPort), Marine Technology Center of Sweden and a
+hand-verified list of national testbeds (`data/national_testbeds.json`).
+Radar follows robots.txt and never bypasses blocks. See `SOURCES.md` for endpoints.
+
+Photos: Wikimedia Commons (CC0 and CC BY-SA, credited in their captions; see
+`frontend/public/assets/credits.json`).
+
+## What was built when
+
+| | What |
+|---|---|
+| **Before the hackathon** (12 Nov, team kick-off and practice, allowed by the organisers) | Data collection, the ten agents, profiles with fact/inferred labels and verification, ranking, Concierge and Guard, Swedish/English interface, email alerts, profile corrections with Google sign-in, Bolagsverket facts, Postgres support |
+| **During the hackathon** (from 13 Nov) | 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start |
+| **Reused, not built by us** | Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq, a multilingual embedding model, public APIs and data, Blue Science Park's colours as a visual reference |
+
+## Known limits and next steps
+
+**Limits**
+- Some sites block automated reading (ericsson.com, ri.se, Testbed Sweden); Radar uses other public sources.
+- The fit score weights are provisional and not yet calibrated with staff or members.
 - Requirement checks are indicative; eligibility is decided by the funder. Testbed availability is never confirmed.
 - Regional events are sparse in machine-readable form; most events found are online.
-- Sign-in is Google only; company membership is approved by domain match or by staff.
-- The scheduler only runs while the API process runs on that machine.
+- The start screen is a simulated sign-in; real sign-in is Google only, with membership by email domain or staff approval.
+- Tips from the park are shown in Radar only; no email is sent. The scheduler runs only while the API runs.
 
-## Next steps
-
-1. Calibrate the score weights with Blue Science Park staff using the evidence page.
-2. Blue Science Park's own sign-in and member register instead of Google + domain matching.
-3. Hosted deployment with Postgres and a proper job scheduler.
-4. Consortium builder: members + BTH researchers for calls that need partners.
+**Next steps**
+1. Calibrate the score weights with Blue Science Park staff, using the evidence page and member feedback.
+2. Blue Science Park's own sign-in and member register instead of Google and domain matching.
+3. Hosted deployment with Postgres and a proper job scheduler; real email for park tips.
+4. Consortium builder: members and BTH researchers for calls that need partners.
 5. More sources: Swecris, JobTech hiring signals, TED public procurement.
 
-**First rollout step:** run Radar for 5–10 volunteer members for one month, with weekly digests
-and a staff member reviewing the top 10 each week on the evidence page.
+**First rollout step:** run Radar for 5–10 volunteer members for one month, with weekly digests and a
+staff member reviewing the top 10 each week.
 
-**Biggest risk:** trust. If a member gets a few confidently wrong suggestions or a profile with a
-wrong fact, they stop reading. That is why every claim has a source, every score shows its reasons
-and missing information, and members can correct their own profile.
+**Biggest risk:** trust. If a member gets a few confidently wrong suggestions or a profile with a wrong
+fact, they stop reading. That is why every claim has a source, every score shows its reasons and missing
+information, and members can correct their own profile.

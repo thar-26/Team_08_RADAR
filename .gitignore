@@ -20,3 +20,4 @@ frontend/.next/
 .taste-skill/
 frontend/.next-build/
 data/demo_snapshot.db
+.claude/
