@@ -13,6 +13,7 @@ from ..schemas import ConciergeAnswer
 from . import guard, matcher
 from . import connector
 from .connector import public_text
+from ..api_support import is_private
 
 STAFF_CONTACT = "https://www.bluesciencepark.se/kontakt/kontaktpersoner/"
 SOURCE_NAMES = {
@@ -62,19 +63,20 @@ TEMPLATES = {
 }
 
 
-def _context(slug: str, question: str = "") -> tuple[str, dict]:
+def _context(slug: str, question: str = "", private: bool = False) -> tuple[str, dict]:
     comp = db.one("SELECT name, profile FROM companies WHERE slug=?", (slug,))
     profile = db.loads(comp["profile"])
     refs: dict[str, dict] = {}
     lines = [f"YOUR COMPANY: {comp['name']}", f"Summary: {profile['summary']}"]
     for c in profile["claims"]:
-        if c.get("review") in ("rejected", "outdated"):
+        # The company's private priorities only reach the model for its own members.
+        if c.get("review") in ("rejected", "outdated") or (is_private(c) and not private):
             continue
         tag = "company-confirmed" if (c.get("origin") == "user" or c.get("review") == "confirmed") else c["status"]
         lines.append(f"- ({tag}, {c['section']}) {c['statement']}")
     lines.append("\nOPPORTUNITIES RANKED FOR YOUR COMPANY:")
     stored = {m["opp_id"]: m for m in db.rows("SELECT * FROM matches WHERE company_slug=?", (slug,))}
-    ranked = matcher.rank(slug)[:14]
+    ranked = matcher.rank(slug, private=private)[:14]
     for i, r in enumerate(ranked, 1):
         o = db.one("SELECT * FROM opportunities WHERE id=?", (r["opp_id"],))
         rid = f"O{i}"
@@ -128,16 +130,18 @@ CLARIFY_FALLBACK = {
 }
 
 
-def respond(slug: str, message: str, lang: str = "en") -> dict:
+def respond(slug: str, message: str, lang: str = "en", *, private: bool = False, owner: str = "") -> dict:
+    """private: the caller is a member of this company (or staff). owner: whose
+    conversation this is; history from other visitors is never used or shown."""
     history = db.rows(
-        "SELECT role, content FROM chat_log WHERE company_slug=? ORDER BY id DESC LIMIT 6", (slug,)
+        "SELECT role, content FROM chat_log WHERE company_slug=? AND owner=? ORDER BY id DESC LIMIT 6", (slug, owner)
     )[::-1]
     verdict = guard.check(message, history)
-    db.execute("INSERT INTO chat_log (company_slug, role, content, verdict, created_at) VALUES (?,?,?,?,?)",
-               (slug, "user", message, json.dumps(verdict), now_iso()))
+    db.execute("INSERT INTO chat_log (company_slug, role, content, verdict, created_at, owner) VALUES (?,?,?,?,?,?)",
+               (slug, "user", message, json.dumps(verdict), now_iso(), owner))
     cat = verdict["category"]
     if cat == "relevant":
-        context, refs = _context(slug, message)
+        context, refs = _context(slug, message, private)
         hist = "\n".join(f"{h['role']}: {h['content'][:400]}" for h in history)
         lang_rule = "Answer in Swedish (svenska)." if lang == "sv" else "Answer in English."
         ans = llm.structured(
@@ -159,6 +163,6 @@ def respond(slug: str, message: str, lang: str = "en") -> dict:
         out = {"answer": (TEMPLATES_SV if lang == "sv" else TEMPLATES)[cat], "citations": [], "next_step": "", "refer_to_staff": cat == "needs_human",
                "staff_contact": STAFF_CONTACT if cat == "needs_human" else ""}
     out["guard"] = verdict
-    db.execute("INSERT INTO chat_log (company_slug, role, content, verdict, created_at) VALUES (?,?,?,?,?)",
-               (slug, "assistant", out["answer"], json.dumps({"category": cat}), now_iso()))
+    db.execute("INSERT INTO chat_log (company_slug, role, content, verdict, created_at, owner) VALUES (?,?,?,?,?,?)",
+               (slug, "assistant", out["answer"], json.dumps({"category": cat}), now_iso(), owner))
     return out

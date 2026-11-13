@@ -11,8 +11,8 @@ const ORDER = ["offerings", "technologies", "applications", "markets", "geograph
 
 /** Anyone can read a profile. Only a signed-in member of this company (or Blue
  *  Science Park staff) can correct it; the API enforces the same rule. */
-export default function ProfileTab({ slug, company, profile, onSaved, toast }: {
-  slug: string; company: string; profile: Profile; onSaved: (p: Profile, feed: FeedItem[]) => void; toast: (m: string) => void;
+export default function ProfileTab({ slug, company, profile, canEdit, onSaved, toast }: {
+  slug: string; company: string; profile: Profile; canEdit: boolean; onSaved: (p: Profile, feed: FeedItem[]) => void; toast: (m: string) => void;
 }) {
   const { t, lang } = useI18n();
   const [section, setSection] = useState("priorities");
@@ -25,7 +25,6 @@ export default function ProfileTab({ slug, company, profile, onSaved, toast }: {
     api<Me>("/api/me").then(setMe).catch(() => setMe(null));
   }, []);
   const membership = me?.memberships?.find((m) => m.slug === slug);
-  const canEdit = !me?.login_required || !!me?.user?.staff || membership?.status === "approved";
 
   async function edit(action: string, claim?: Claim, extra: Record<string, string> = {}) {
     setBusy(true);
@@ -172,6 +171,7 @@ function ClaimRow({ c, busy, canEdit, onAction }: {
           <div className="claim-text">{c.statement}</div>
         )}
         {isRegistry && <div className="stamp"><span className="tag ok">{t("fix.registry")}</span></div>}
+        {c.origin === "user" && c.visibility === "private" && <div className="stamp"><span className="tag warn">{t("pv.private")}</span></div>}
         {c.status === "fact" && ev?.quote && (
           <div className="evidence">
             <q>{ev.quote}</q>
@@ -203,6 +203,9 @@ function ClaimRow({ c, busy, canEdit, onAction }: {
           ) : (
             <>
               {!mine && <button className="iconbtn" disabled={busy} onClick={() => onAction("confirm", c)}>{t("prof.confirm")}</button>}
+              {c.origin === "user" && c.review === "confirmed" && (c.visibility === "private"
+                ? <button className="iconbtn" disabled={busy} onClick={() => confirm(t("pv.confirmPublish")) && onAction("publish", c)}>{t("pv.publish")}</button>
+                : <button className="iconbtn" disabled={busy} onClick={() => onAction("unpublish", c)}>{t("pv.unpublish")}</button>)}
               <button className="iconbtn" disabled={busy} onClick={() => setEditing(true)}>{t("prof.edit")}</button>
               <button className="iconbtn" disabled={busy} onClick={() => onAction("outdated", c)}>{t("fix.outdated")}</button>
               <button className="iconbtn" disabled={busy} onClick={() => onAction("reject", c)}>{t("fix.wrong")}</button>

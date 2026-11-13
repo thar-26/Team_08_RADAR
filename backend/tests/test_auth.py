@@ -14,8 +14,12 @@ def _token(secret, **claims):
 
 
 def test_domain_match_rules():
-    assert auth.domain_matches("anna@techinova.se", "https://techinova.com/sv")  # .se vs .com, same name
+    assert auth.domain_matches("anna@techinova.se", "https://www.techinova.se/")
     assert auth.domain_matches("lars@saab.com", "https://www.saab.com/")
+    assert auth.domain_matches("lars@saabgroup.com", "https://www.saab.com/", "saab")  # approved alias
+    assert not auth.domain_matches("anna@techinova.com", "https://www.techinova.se/")  # look-alike domain
+    assert not auth.domain_matches("eve@saab.xyz", "https://www.saab.com/")
+    assert not auth.domain_matches("eve@notsaab.com", "https://www.saab.com/")
     assert not auth.domain_matches("lars@gmail.com", "https://www.saab.com/")  # free mail never auto-matches
     assert not auth.domain_matches("eve@evil.se", "https://www.saab.com/")
 
@@ -43,3 +47,10 @@ def test_anonymous_blocked_when_login_configured(monkeypatch):
         auth.require(None, "techinova")
     assert e.value.status_code == 401
     auth.require(auth.SYSTEM, "techinova")  # staff/system passes
+
+
+def test_no_login_provider_means_no_anonymous_edits(monkeypatch):
+    monkeypatch.delenv("AUTH_GOOGLE_ID", raising=False)
+    monkeypatch.delenv("AUTH_MICROSOFT_ENTRA_ID_ID", raising=False)
+    assert not auth.can_access(None, "techinova")
+    assert not auth.can_access({"email": "a@b.se", "name": "A", "staff": False}, "techinova")

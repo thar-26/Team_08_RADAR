@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { PHOTOS } from "@/components/Footer";
 import Scope from "@/components/Scope";
+import Steps from "@/components/Steps";
+import { useRole } from "@/components/RoleGate";
 import { ErrorNote, KindPill, Skeleton, SourceLink, useFetch } from "@/components/ui";
 import { api, daysUntil, fmtDate, withLang, type Eco, type Member, type Overview } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 export default function Home() {
   const { t, lang } = useI18n();
+  const { role } = useRole();
   const ov = useFetch(() => api<Overview>(withLang("/api/overview", lang)), [lang]);
   const eco = useFetch(() => api<Eco>("/api/ecosystem"));
   const members = useFetch(() => api<Member[]>("/api/companies"));
@@ -26,7 +29,9 @@ export default function Home() {
             <h1 className="display" data-reveal>{t("home.title1")}<br />{t("home.title2")}</h1>
             <p className="lead" data-reveal>{t("home.lede")}</p>
             <div className="row" style={{ marginTop: 36, gap: 14 }} data-reveal>
-              <Link className="btn sky" href={demo[0] ? `/c/${demo[0].slug}` : "/members"}>{t("home.cta")}</Link>
+              {role?.kind === "bsp" ? <Link className="btn sky" href="/park">{t("home.ctaPark")}</Link>
+                : role?.kind === "company" ? <Link className="btn sky" href={`/c/${role.slug}`}>{t("home.ctaMine")}</Link>
+                : <Link className="btn sky" href={demo[0] ? `/c/${demo[0].slug}` : "/members"}>{t("home.cta")}</Link>}
               <Link className="btn line" href="/trust">{t("home.cta2")}</Link>
             </div>
           </div>
@@ -54,6 +59,13 @@ export default function Home() {
         </div>
       </section>
       {ov.error && <div className="shell" style={{ marginTop: 24 }}><ErrorNote error={ov.error} /></div>}
+
+      <section className="section steps-band">
+        <div className="shell">
+          <h2>{t("home.stepsTitle")}</h2>
+          <Steps />
+        </div>
+      </section>
 
       <section className="section">
         <div className="shell side">

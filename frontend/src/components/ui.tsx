@@ -8,11 +8,14 @@ export function Skeleton({ h = 16, w = "100%" }: { h?: number; w?: number | stri
   return <div className="skeleton" style={{ height: h, width: w }} />;
 }
 
-export function ErrorNote({ error }: { error: string }) {
+/** A failed request, in plain words, with a way to try again. The technical
+ *  detail stays out of sight (hover) for whoever runs the demo. */
+export function ErrorNote({ error, onRetry }: { error: string; onRetry?: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="banner" role="alert">
-      {t("err.api", { error })} <span className="kbd">.venv\Scripts\python -m uvicorn radar.api:app --port 8000</span>
+    <div className="banner" role="alert" title={error}>
+      <span>{t("err.friendly")}</span>{" "}
+      <button className="textbtn" onClick={onRetry ?? (() => window.location.reload())}>{t("err.retry")}</button>
     </div>
   );
 }
@@ -42,7 +45,18 @@ export function KindPill({ kind }: { kind: Opportunity["kind"] }) {
 
 export function When({ o }: { o: Opportunity }) {
   const { t, lang } = useI18n();
-  if (o.kind === "testbed") return <span>{t("feed.available")} · {o.location}</span>;
+  if (o.kind === "testbed") {
+    // Radar never confirms access or free time slots for a testbed.
+    const until = o.source === "vinnova_projects" ? /runs until (\d{4}-\d{2}-\d{2})/.exec(o.programme ?? "")?.[1] : null;
+    return (
+      <span>
+        {o.source === "vinnova_projects" ? t("tb.fundedProject") : t("tb.facility")}
+        {o.location ? ` · ${o.location}` : ""}
+        {until ? ` · ${t("tb.until", { date: fmtDate(until, lang) })}` : ""}
+        {" · "}<span className="unverified">{t("tb.notVerified")}</span>
+      </span>
+    );
+  }
   const d = o.deadline ?? o.event_date;
   const n = daysUntil(d);
   return (
@@ -66,6 +80,7 @@ export function useFetch<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [nonce, setNonce] = useState(0);
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -77,6 +92,6 @@ export function useFetch<T>(fn: () => Promise<T>, deps: unknown[] = []) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return { data, error, status, loading, setData };
+  }, [...deps, nonce]);
+  return { data, error, status, loading, setData, reload: () => setNonce((n) => n + 1) };
 }

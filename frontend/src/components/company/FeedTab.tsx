@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KindPill, When } from "@/components/ui";
 import { api, API, fmtDate, host, withLang, type Explanation, type FeedItem, type Opportunity, type Reason } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
@@ -11,10 +11,18 @@ const PAGE = 10;
 const REGIONS = ["blekinge", "stockholm", "vastra_gotaland", "skane", "other_se", "abroad", "online", "unknown"] as const;
 const FORMATS = ["online", "in_person", "hybrid", "unknown"] as const;
 
-export default function FeedTab({ slug, company, items, onFeedback, toast, onUndoable }: {
-  slug: string; company: string; items: FeedItem[]; onFeedback: () => void; toast: (m: string) => void; onUndoable: (undo: () => void) => void;
+export default function FeedTab({ slug, company, items, canEdit, onFeedback, toast, onUndoable }: {
+  slug: string; company: string; items: FeedItem[]; canEdit: boolean; onFeedback: () => void; toast: (m: string) => void; onUndoable: (undo: () => void) => void;
 }) {
   const { t } = useI18n();
+  // After a profile change the explanations are rewritten in the background: check back until done.
+  const updating = items.some((i) => i.updating);
+  const [polls, setPolls] = useState(0);
+  useEffect(() => {
+    if (!updating || polls > 20) return;
+    const id = setTimeout(() => { setPolls((n) => n + 1); onFeedback(); }, 8000);
+    return () => clearTimeout(id);
+  }, [updating, polls, onFeedback]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [pages, setPages] = useState(1);
   const [region, setRegion] = useState("all");
@@ -45,6 +53,7 @@ export default function FeedTab({ slug, company, items, onFeedback, toast, onUnd
         </div>
         <span className="note">{t("feed.disclaimer")}</span>
       </div>
+      {!canEdit && <p className="note" style={{ margin: "0 0 4px" }}>{t("feed.signInToSave")}</p>}
       {filter === "event" && (
         <div className="event-filters">
           <label>
@@ -76,7 +85,7 @@ export default function FeedTab({ slug, company, items, onFeedback, toast, onUnd
       )}
       <div className="feed">
         {shown.map((it, i) => (
-          <FeedItemRow key={it.opportunity.id} slug={slug} company={company} item={it} rank={i + 1} onFeedback={onFeedback} toast={toast} onUndoable={onUndoable} />
+          <FeedItemRow key={it.opportunity.id} slug={slug} company={company} item={it} rank={i + 1} canEdit={canEdit} onFeedback={onFeedback} toast={toast} onUndoable={onUndoable} />
         ))}
       </div>
       {rest > 0 && (
@@ -123,8 +132,8 @@ export function useReasonText() {
   };
 }
 
-function FeedItemRow({ slug, company, item, rank, onFeedback, toast, onUndoable }: {
-  slug: string; company: string; item: FeedItem; rank: number; onFeedback: () => void; toast: (m: string) => void; onUndoable: (undo: () => void) => void;
+function FeedItemRow({ slug, company, item, rank, canEdit, onFeedback, toast, onUndoable }: {
+  slug: string; company: string; item: FeedItem; rank: number; canEdit: boolean; onFeedback: () => void; toast: (m: string) => void; onUndoable: (undo: () => void) => void;
 }) {
   const { t, lang } = useI18n();
   const reason = useReasonText();
@@ -173,11 +182,15 @@ function FeedItemRow({ slug, company, item, rank, onFeedback, toast, onUndoable 
           {o.kind === "event" && (o.region === "unknown"
             ? <span className="loc-unknown">{t("ev.unknownLoc")}</span>
             : <span>{o.location_mode && o.location_mode !== "unknown" ? t(`mode.${o.location_mode}` as Key) : ""}{o.location_mode && o.location_mode !== "unknown" && o.location ? " · " : ""}{o.location || t(`evr.${o.region}` as Key)}</span>)}
+          {o.kind === "testbed" && o.source !== "vinnova_projects" && o.programme && <span>{t("tb.operator", { name: o.programme })}</span>}
           <span>{t("feed.source")} <a href={o.url} target="_blank" rel="noreferrer">{host(o.url)}</a></span>
+          {o.manually_verified && o.published && <span>{t("tb.checked", { date: fmtDate(o.published, lang) })}</span>}
           <span>{t("feed.retrieved", { date: fmtDate(o.fetched_at, lang) })}</span>
         </div>
 
-        {ok ? (
+        {item.updating && !fresh ? (
+          <p className="note updating" role="status">{t("feed.updating")}</p>
+        ) : ok ? (
           <>
             <p className="why">{exp!.why}</p>
             {exp!.next_step && <p className="next"><b>{t("feed.next")}:</b> {exp!.next_step}</p>}
@@ -227,11 +240,13 @@ function FeedItemRow({ slug, company, item, rank, onFeedback, toast, onUndoable 
 
         <div className="actions">
           <button className="btn small" onClick={() => setContact(!contact)} aria-expanded={contact}>{contact ? t("ct.hide") : t("ct.show")}</button>
+          {canEdit && <>
           <button className={`btn quiet small ${item.feedback.includes("saved") ? "on" : ""}`} onClick={() => fb("saved")} aria-pressed={item.feedback.includes("saved")}>{item.feedback.includes("saved") ? t("feed.saved") : t("feed.save")}</button>
           <button className={`btn quiet small ${item.feedback.includes("up") ? "on" : ""}`} onClick={() => fb("up")} aria-pressed={item.feedback.includes("up")}>{t("feed.relevant")}</button>
           <button className="btn quiet small" onClick={() => fb("down")}>{t("feed.notForUs")}</button>
+          </>}
           {(o.deadline || o.event_date) && <a className="btn quiet small" href={`${API}/api/opportunities/${encodeURIComponent(o.id)}/ics`}>{t("feed.calendar")}</a>}
-          {o.apply_url && o.apply_url !== o.url && <a className="btn quiet small" href={o.apply_url} target="_blank" rel="noreferrer">{t("feed.apply")}</a>}
+          {o.apply_url && o.apply_url !== o.url && o.kind !== "testbed" && <a className="btn quiet small" href={o.apply_url} target="_blank" rel="noreferrer">{t("feed.apply")}</a>}
           <button className="textbtn" style={{ marginLeft: "auto" }} onClick={() => setOpen(!open)} aria-expanded={open}>{open ? t("feed.hide") : t("feed.show")}</button>
         </div>
       </div>

@@ -63,6 +63,27 @@ the top 10 with "show more".
 - **Evidence** (`/evidence`): the team rates the top 10 for demo companies (hit rate), and every model
   call is logged with tokens and time. No prices are invented.
 
+## Sign-in, roles and privacy
+
+- **Start screen (simulated):** on the first visit Radar asks whether you are Blue Science Park or a member
+  company and opens that view. This is a simulation for the demo: it grants no rights. The header shows the
+  simulated view and lets you switch.
+- **Real sign-in (Google)** is needed to change a profile or see a company's private data. Blue Science Park
+  staff are the addresses in `RADAR_STAFF_EMAILS` and can see and edit everything and approve access requests
+  (Account page). Company access is granted automatically only for the exact email domain of the company's
+  website (or an approved alias, e.g. saabgroup.com for Saab); anything else is a request staff approve.
+- **Private by default:** priorities a company adds, its saved items, feedback, alerts, email previews and
+  chats are only shown to its signed-in members and staff (enforced in the API, tested in
+  `backend/tests/test_privacy.py`). A company can choose to make an added priority public.
+- **Two simulated views with their own features:**
+  - *Blue Science Park*: **Park overview** (`/park`): each profiled member's strong and possible matches,
+    nearest deadline and best match, plus **Who does this opportunity fit?**: pick a call, event or testbed,
+    see the members it fits best (same 1–10 score) and **Send tip**.
+  - *Member company*: **My radar** in the menu, **This week and next** (its upcoming deadlines and events)
+    and **Tips from Blue Science Park** on its page. Tips are simulated: shown in Radar, no email is sent.
+- **Anyone** can profile a member that has no profile yet (public sources only); rebuilding an existing
+  profile is for the company or staff.
+
 ## Agents
 
 | Agent | Model | Job |
@@ -116,6 +137,8 @@ npm run dev                                          # http://localhost:3000
 | `RADAR_TODAY` | Freeze "today" for a demo, e.g. `2026-11-14` |
 
 ## Useful commands
+
+On Windows, double-click `start-radar.bat` to start the API and the website and open the browser.
 
 ```bash
 python -m radar.pipeline collect       # refresh all sources (incl. national testbeds)

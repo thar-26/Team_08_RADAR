@@ -1,13 +1,30 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { api, API, fmtDate, type Alerts } from "@/lib/api";
+import { api, fmtDate, type Alerts } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 const KINDS = ["funding", "event", "testbed"] as const;
 
-export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: string) => void }) {
+/** Alert settings and emails are the company's own: only its signed-in
+ *  representatives (and staff) see them; the API enforces the same rule. */
+export default function AlertsTab({ slug, company, canEdit, toast }: { slug: string; company: string; canEdit: boolean; toast: (m: string) => void }) {
+  const { t } = useI18n();
+  if (!canEdit) {
+    return (
+      <div className="panel navy" style={{ marginTop: 48, maxWidth: 620 }}>
+        <h3>{t("al.signIn")}</h3>
+        <p style={{ margin: "8px 0 16px", color: "rgba(255,255,255,.85)" }}>{t("al.signInText", { company })}</p>
+        <Link className="btn sky" href={`/login?callbackUrl=${encodeURIComponent(`/c/${slug}?tab=alerts`)}`}>{t("al.signInBtn")}</Link>
+      </div>
+    );
+  }
+  return <Alerts slug={slug} toast={toast} />;
+}
+
+function Alerts({ slug, toast }: { slug: string; toast: (m: string) => void }) {
   const { t, lang } = useI18n();
   const [data, setData] = useState<Alerts | null>(null);
   const [email, setEmail] = useState("");
@@ -23,8 +40,8 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
 
   useEffect(() => {
     if (!preview) return;
-    fetch(`${API}/api/outbox/${preview}`).then((r) => r.text()).then(setPreviewHtml).catch(() => setPreviewHtml(""));
-  }, [preview]);
+    api<{ html: string }>(`/api/companies/${slug}/outbox/${preview}`).then((d) => setPreviewHtml(d.html)).catch(() => setPreviewHtml(""));
+  }, [preview, slug]);
 
   useEffect(() => {
     api<Alerts>(`/api/companies/${slug}/alerts`).then((d) => {

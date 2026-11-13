@@ -3,6 +3,7 @@ import { Roboto } from "next/font/google";
 import Footer from "@/components/Footer";
 import Masthead from "@/components/Masthead";
 import Providers from "@/components/Providers";
+import { RoleProvider } from "@/components/RoleGate";
 import { LangProvider } from "@/lib/i18n";
 import "./globals.css";
 
@@ -21,10 +22,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className={roboto.variable}>
         <Providers>
         <LangProvider>
+        <RoleProvider>
           <a className="skip" href="#main">Hoppa till innehållet / Skip to content</a>
           <Masthead />
           <main id="main">{children}</main>
           <Footer />
+        </RoleProvider>
         </LangProvider>
         </Providers>
       </body>

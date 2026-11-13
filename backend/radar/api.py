@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from . import geo, auth, db
 from .auth import current_user
 from .agents import concierge, connector, matcher, notifier, profiler
-from .api_support import apply_edit
+from .api_support import public_profile, apply_edit
 from .config import DATA, DEMO_COMPANIES, now_iso, today
 from .translate import Collector, translate
 
@@ -192,13 +192,24 @@ def member_search(q: str, lang: str = "sv", exclude: str | None = None):
     return out
 
 
+def _own(user: dict | None, slug: str) -> bool:
+    """Is the caller one of this company's approved members (or staff)? Only they
+    see private priorities, saved items, feedback, alerts and their own chats."""
+    return auth.can_access(user, slug)
+
+
+def _visible(profile: dict, user: dict | None, slug: str) -> dict:
+    return profile if _own(user, slug) else public_profile(profile)
+
+
 @app.get("/api/companies/{slug}")
 def company(slug: str, lang: str = "sv", user: dict | None = Depends(current_user)):
     c = _company(slug)
     if not c["profile"]:
         raise HTTPException(409, "This member has not been profiled yet")
     return {"slug": slug, "name": c["name"], "website": c["website"], "bsp_page": c["bsp_page"],
-            "version": c["profile_version"], "updated_at": c["updated_at"], "profile": _localised_profile(c["profile"], _lang(lang))}
+            "version": c["profile_version"], "updated_at": c["updated_at"], "can_edit": _own(user, slug),
+            "profile": _localised_profile(_visible(c["profile"], user, slug), _lang(lang))}
 
 
 def _localised_profile(p: dict, lang: str) -> dict:
@@ -211,12 +222,14 @@ def _localised_profile(p: dict, lang: str) -> dict:
 
 @app.post("/api/companies/{slug}/build")
 def build(slug: str, user: dict | None = Depends(current_user)):
-    if auth.login_required() and not (user and user['staff']):
-        raise HTTPException(403, 'Only Blue Science Park staff can profile new members')
-    """Profile any member on demand: crawl its public pages, profile, verify, rank."""
+    """Profile any member on demand: crawl its public pages, profile, verify, rank.
+    Anyone may profile a member that has no profile yet (only public sources are
+    used). Rebuilding an existing profile is for the company itself or staff."""
     from .collectors import websites
 
     c = _company(slug)
+    if c["profile"] and not _own(user, slug):
+        raise HTTPException(401 if not user else 403, "This member already has a profile; only its members or staff can rebuild it")
     if not c["website"]:
         raise HTTPException(400, "No public website known for this member")
     from .collectors.members import member_page_text
@@ -240,7 +253,8 @@ def build(slug: str, user: dict | None = Depends(current_user)):
 
 
 class Edit(BaseModel):
-    action: str                 # confirm | reject | edit | add | restore
+    action: str                 # confirm | reject | outdated | edit | add | restore | publish | unpublish
+    public: bool | None = None  # for "add": publish immediately (default: private to the company)
     claim_id: str | None = None
     statement: str | None = None
     section: str | None = None
@@ -275,9 +289,13 @@ def edit_profile(slug: str, e: Edit, user: dict | None = Depends(current_user)):
 @app.get("/api/companies/{slug}/timeline")
 def timeline(slug: str, user: dict | None = Depends(current_user)):
     versions = db.rows("SELECT version, author, note, created_at, profile FROM profile_versions WHERE slug=? ORDER BY version", (slug,))
+    own = _own(user, slug)
     out, prev = [], None
     for v in versions:
         p = db.loads(v["profile"])
+        if not own:  # outsiders see public changes only; notes may quote private text
+            p = public_profile(p)
+            v["note"] = "" if v["author"] == "user" else v["note"]
         d = profiler.diff_profiles(prev, p) if prev else {"added": p["claims"], "removed": [], "changed": []}
         out.append({"version": v["version"], "author": v["author"], "note": v["note"], "created_at": v["created_at"],
                     "added": [c["statement"] for c in d["added"]][:30], "removed": [c["statement"] for c in d["removed"]],
@@ -291,22 +309,26 @@ def feed(slug: str, kind: str | None = None, limit: int = 30, lang: str = "sv", 
     """Ranked recommendations with an indicative 1-10 fit score and its reasons:
     the best `limit` of each kind, in one list ordered by score. The page shows
     the top 10 and reveals the rest on request."""
-    _company(slug)
+    c = _company(slug)
     lang = _lang(lang)
-    ranked = matcher.rank(slug)
+    own = _own(user, slug)
+    ranked = matcher.rank(slug, private=own)
     stored = {m["opp_id"]: m for m in db.rows("SELECT * FROM matches WHERE company_slug=?", (slug,))}
     fb = {}
-    for f in db.rows("SELECT opp_id, value FROM feedback WHERE company_slug=?", (slug,)):
+    for f in (db.rows("SELECT opp_id, value FROM feedback WHERE company_slug=?", (slug,)) if own else []):
         fb.setdefault(f["opp_id"], []).append(f["value"])
     scored = []
     for r in ranked:
         if (kind and r["kind"] != kind) or "down" in fb.get(r["opp_id"], []):
             continue
-        exp = db.loads(stored[r["opp_id"]]["explanation"]) if r["opp_id"] in stored else None
+        m = stored.get(r["opp_id"])
+        exp = db.loads(m["explanation"]) if m else None
         if exp and exp.get("error"):
             exp = None
+        # Written for an older version of the profile: being rewritten in the background.
+        updating = bool(m and (m.get("profile_version") or 0) < (c["profile_version"] or 0))
         fit, level = matcher.final_score(r, exp)
-        scored.append((fit, r, exp, level))
+        scored.append((fit, r, exp, level, updating))
     scored.sort(key=lambda x: -x[0])
     per_kind: dict[str, int] = {}
     keep = []
@@ -316,10 +338,10 @@ def feed(slug: str, kind: str | None = None, limit: int = 30, lang: str = "sv", 
         if per_kind[x[1]["kind"]] <= (100 if x[1]["kind"] == "event" else max(1, min(limit, 100))):
             keep.append(x)
     items = []
-    for fit, r, exp, level in keep:
+    for fit, r, exp, level, updating in keep:
         o = db.one("SELECT * FROM opportunities WHERE id=?", (r["opp_id"],))
         items.append({
-            "rank": len(items) + 1, "score": r["score"], "fit": fit, "level": level, "assessed": exp is not None,
+            "rank": len(items) + 1, "score": r["score"], "fit": fit, "level": level, "assessed": exp is not None, "updating": updating,
             "components": r["components"], "reasons": [dict(x, p=dict(x.get("p") or {})) for x in r["reasons"]],
             "missing": r["missing"], "anchor_claim": r["anchor_claim"],
             "opportunity": _opp_public(o), "explanation": exp, "feedback": fb.get(r["opp_id"], []),
@@ -343,7 +365,7 @@ def explain(slug: str, opp_id: str, lang: str = "sv", user: dict | None = Depend
     if not db.one("SELECT 1 FROM opportunities WHERE id=?", (opp_id,)):
         raise HTTPException(404, "Unknown opportunity")
     exp = matcher.explain(slug, opp_id)
-    r = next((x for x in matcher.rank(slug) if x["opp_id"] == opp_id), None)
+    r = next((x for x in matcher.rank(slug, private=False) if x["opp_id"] == opp_id), None)
     db.upsert("matches", {"company_slug": slug, "opp_id": opp_id, "score": matcher.final_score(r, exp)[0] if r else 0,
                           "components": json.dumps((r or {}).get("components", {})), "explanation": json.dumps(exp, ensure_ascii=False),
                           "profile_version": _company(slug)["profile_version"], "created_at": now_iso()}, ["company_slug", "opp_id"])
@@ -362,6 +384,7 @@ class Feedback(BaseModel):
 @app.post("/api/companies/{slug}/feedback")
 def feedback(slug: str, f: Feedback, user: dict | None = Depends(current_user)):
     _company(slug)
+    auth.require_edit(user, slug)  # saved items and feedback are the company's own
     if f.value not in ("up", "down", "saved"):
         raise HTTPException(400, "value must be up, down or saved")
     if f.undo:
@@ -375,6 +398,7 @@ def feedback(slug: str, f: Feedback, user: dict | None = Depends(current_user)):
 
 @app.get("/api/companies/{slug}/saved")
 def saved(slug: str, user: dict | None = Depends(current_user)):
+    auth.require_edit(user, slug)
     ids = [r["opp_id"] for r in db.rows("SELECT opp_id FROM feedback WHERE company_slug=? AND value='saved' ORDER BY created_at DESC", (slug,))]
     return [_opp_public(db.one("SELECT * FROM opportunities WHERE id=?", (i,))) for i in ids if db.one("SELECT 1 FROM opportunities WHERE id=?", (i,))]
 
@@ -394,9 +418,23 @@ def connections(slug: str, lang: str = "sv", user: dict | None = Depends(current
     return out
 
 
+def _chat_owner(user: dict | None, slug: str, session: str) -> str:
+    """Members share their company's conversation; everyone else only ever sees
+    their own (a signed-in user by email, an anonymous visitor by browser session)."""
+    if _own(user, slug):
+        return f"company:{slug}"
+    if user:
+        return f"user:{user['email']}"
+    sid = "".join(ch for ch in (session or "") if ch.isalnum() or ch == "-")[:64]
+    if len(sid) < 16:
+        raise HTTPException(400, "Missing chat session")
+    return f"anon:{sid}"
+
+
 class ChatIn(BaseModel):
     message: str
     lang: str | None = None
+    session: str = ""  # anonymous visitor's browser session id
 
 
 @app.post("/api/companies/{slug}/chat")
@@ -407,7 +445,8 @@ def chat(slug: str, m: ChatIn, user: dict | None = Depends(current_user)):
     if not m.message.strip():
         raise HTTPException(400, "Empty message")
     lang = _lang(m.lang)
-    out = concierge.respond(slug, m.message.strip()[:2000], lang=lang)
+    out = concierge.respond(slug, m.message.strip()[:2000], lang=lang, private=_own(user, slug),
+                            owner=_chat_owner(user, slug, m.session))
     tc = Collector(lang)
     for cit in out.get("citations", []):
         o = db.one("SELECT * FROM opportunities WHERE id=?", (cit.get("opp_id") or "",))
@@ -466,6 +505,7 @@ class AlertsIn(BaseModel):
 @app.get("/api/companies/{slug}/alerts")
 def alerts_status(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
+    auth.require_edit(user, slug)  # alert settings and emails are the company's own
     notifier.init()
     sub = db.one("SELECT email, kinds, min_relevance, lang, consent_at, active, frequency, last_digest_at FROM subscriptions WHERE company_slug=?", (slug,))
     if sub:
@@ -483,6 +523,7 @@ def alerts_status(slug: str, user: dict | None = Depends(current_user)):
 @app.post("/api/companies/{slug}/alerts")
 def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current_user)):
     _company(slug)
+    auth.require_edit(user, slug)  # alert settings and emails are the company's own
     if not a.consent:
         raise HTTPException(400, "Consent is required to receive emails")
     notifier.init()
@@ -496,6 +537,7 @@ def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current
 @app.post("/api/companies/{slug}/alerts/check")
 def alerts_check(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
+    auth.require_edit(user, slug)  # alert settings and emails are the company's own
     return notifier.run(slug) | alerts_status(slug, user=user)
 
 
@@ -503,6 +545,7 @@ def alerts_check(slug: str, user: dict | None = Depends(current_user)):
 def alerts_digest(slug: str, user: dict | None = Depends(current_user)):
     """Send the weekly digest now (manual trigger for demos and staff)."""
     _company(slug)
+    auth.require_edit(user, slug)  # alert settings and emails are the company's own
     notifier.init()
     if not db.one("SELECT 1 FROM subscriptions WHERE company_slug=? AND active=1", (slug,)):
         raise HTTPException(400, "Subscribe first")
@@ -513,11 +556,15 @@ def alerts_digest(slug: str, user: dict | None = Depends(current_user)):
 def _start_scheduler() -> None:
     notifier.init()
     notifier.start_scheduler()
+    # Rank every profiled member once in the background, so the first page loads
+    # (including the park overview) are fast during a demo.
+    threading.Thread(target=lambda: park_overview(lang="sv"), daemon=True).start()
 
 
 @app.delete("/api/companies/{slug}/alerts")
 def alerts_delete(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
+    auth.require_edit(user, slug)  # alert settings and emails are the company's own
     notifier.init()
     db.execute("UPDATE subscriptions SET active=0 WHERE company_slug=?", (slug,))
     return alerts_status(slug, user=user)
@@ -532,25 +579,26 @@ def alerts_unsubscribe(u: Unsub):
     return {"ok": notifier.unsubscribe(u.token)}
 
 
-@app.get("/api/outbox/{msg_id}", response_class=Response)
-def outbox_html(msg_id: int, user: dict | None = Depends(current_user)):
+@app.get("/api/companies/{slug}/outbox/{msg_id}")
+def outbox_html(slug: str, msg_id: int, user: dict | None = Depends(current_user)):
+    auth.require_edit(user, slug)  # emails contain the company's address and matches
     notifier.init()
-    m = db.one("SELECT html, company_slug FROM outbox WHERE id=?", (msg_id,))
+    m = db.one("SELECT html FROM outbox WHERE id=? AND company_slug=?", (msg_id, slug))
     if not m:
         raise HTTPException(404)
-    # Company pages are open in the prototype; editing is what requires sign-in.
-    return Response(m["html"], media_type="text/html")
+    return {"html": m["html"]}
 
 
 @app.get("/api/companies/{slug}/chat")
-def chat_history(slug: str, user: dict | None = Depends(current_user)):
-    # Only this company's own conversation is ever returned.
-    return db.rows("SELECT role, content, verdict, created_at FROM chat_log WHERE company_slug=? ORDER BY id", (slug,))
+def chat_history(slug: str, session: str = "", user: dict | None = Depends(current_user)):
+    # Only the caller's own conversation is ever returned.
+    owner = _chat_owner(user, slug, session)
+    return db.rows("SELECT role, content, verdict, created_at FROM chat_log WHERE company_slug=? AND owner=? ORDER BY id", (slug, owner))
 
 
 @app.delete("/api/companies/{slug}/chat")
-def chat_clear(slug: str, user: dict | None = Depends(current_user)):
-    db.execute("DELETE FROM chat_log WHERE company_slug=?", (slug,))
+def chat_clear(slug: str, session: str = "", user: dict | None = Depends(current_user)):
+    db.execute("DELETE FROM chat_log WHERE company_slug=? AND owner=?", (slug, _chat_owner(user, slug, session)))
     return {"ok": True}
 
 
@@ -737,3 +785,139 @@ def evidence_rate(r: Rating):
     db.upsert("relevance_ratings", {"company_slug": r.slug, "opp_id": r.opp_id, "rater": rater, "rating": r.rating,
                                      "fit": r.fit, "rank": r.rank, "at": now_iso()}, ["company_slug", "opp_id", "rater"])
     return evidence()
+
+
+# ---------------------------------------------------------------- Blue Science Park view
+# Views for the park's own staff in the demo (opened through the simulated
+# "Blue Science Park" choice). They use public profiles and the same 1-10 score
+# as the members' own pages; nothing private is shown here.
+def _profiled() -> list[dict]:
+    return db.rows("SELECT slug, name, updated_at, profile_version FROM companies "
+                   "WHERE profile IS NOT NULL AND slug NOT LIKE 'sim-%' ORDER BY name")
+
+
+def _scored(slug: str) -> list[tuple[float, str, dict]]:
+    """(fit, level, ranked item) for one member, public view, best first."""
+    stored = {m["opp_id"]: db.loads(m["explanation"]) for m in db.rows("SELECT opp_id, explanation FROM matches WHERE company_slug=?", (slug,))}
+    out = []
+    for r in matcher.rank(slug, private=False):
+        exp = stored.get(r["opp_id"])
+        fit, level = matcher.final_score(r, exp if exp and not exp.get("error") else None)
+        out.append((fit, level, r))
+    out.sort(key=lambda x: -x[0])
+    return out
+
+
+def _feed_like(scored: list) -> list:
+    """The same selection the member's own feed shows: the best 30 of each type."""
+    seen: dict[str, int] = {}
+    keep = []
+    for x in scored:
+        k = x[2]["kind"]
+        seen[k] = seen.get(k, 0) + 1
+        if seen[k] <= 30:
+            keep.append(x)
+    return keep
+
+
+@app.get("/api/park/overview")
+def park_overview(lang: str = "sv"):
+    """Per profiled member: strong and possible matches, the nearest deadline among
+    them, when the profile was updated and how many tips the park has sent."""
+    _tips_init()
+    rows = []
+    for c in _profiled():
+        scored = _feed_like(_scored(c["slug"]))
+        good = [(f, lv, r) for f, lv, r in scored if lv in ("strong", "possible")]
+        deadlines = []
+        for f, lv, r in good:
+            o = db.one("SELECT id, title, title_sv, deadline FROM opportunities WHERE id=?", (r["opp_id"],))
+            if o and o["deadline"]:
+                deadlines.append((o["deadline"], o, f))
+        deadlines.sort(key=lambda x: x[0])
+        nxt = deadlines[0] if deadlines else None
+        top = db.one("SELECT id, title, title_sv FROM opportunities WHERE id=?", (scored[0][2]["opp_id"],)) if scored else None
+        rows.append({
+            "slug": c["slug"], "name": c["name"], "updated_at": c["updated_at"],
+            "strong": sum(1 for _, lv, _r in scored if lv == "strong"),
+            "possible": sum(1 for _, lv, _r in scored if lv == "possible"),
+            "top": top and {"id": top["id"], "title": (top["title_sv"] if lang == "sv" and top.get("title_sv") else top["title"]), "fit": scored[0][0]},
+            "next_deadline": nxt and {"id": nxt[1]["id"], "date": nxt[0][:10], "fit": nxt[2],
+                                      "title": (nxt[1]["title_sv"] if lang == "sv" and nxt[1].get("title_sv") else nxt[1]["title"])},
+            "tips": db.one("SELECT COUNT(*) AS n FROM park_tips WHERE company_slug=?", (c["slug"],))["n"],
+        })
+    return rows
+
+
+@app.get("/api/park/fit")
+def park_fit(opp_id: str, lang: str = "sv"):
+    """Which members does this opportunity fit best? Same score as on their pages."""
+    o = db.one("SELECT * FROM opportunities WHERE id=?", (opp_id,))
+    if not o:
+        raise HTTPException(404, "Unknown opportunity")
+    out = []
+    for c in _profiled():
+        hit = next(((f, lv, r) for f, lv, r in _scored(c["slug"]) if r["opp_id"] == opp_id), None)
+        if not hit:
+            continue
+        f, lv, r = hit
+        m = db.one("SELECT explanation FROM matches WHERE company_slug=? AND opp_id=?", (c["slug"], opp_id))
+        why = (db.loads(m["explanation"]) or {}).get("why", "") if m else ""
+        out.append({"slug": c["slug"], "name": c["name"], "fit": f, "level": lv, "why": why,
+                    "reasons": [dict(x, p=dict(x.get("p") or {})) for x in r["reasons"][:3]]})
+    out.sort(key=lambda x: -x["fit"])
+    tc = Collector(_lang(lang))
+    for x in out:
+        tc.add(x, "why")
+        if _lang(lang) == "sv":
+            for rs in x["reasons"]:
+                if rs["p"].get("claim"):
+                    tc.add(rs["p"], "claim")
+    tc.run()
+    return {"opportunity": _opp_public(o), "members": out}
+
+
+def _tips_init() -> None:
+    db.execute("CREATE TABLE IF NOT EXISTS park_tips (id INTEGER PRIMARY KEY AUTOINCREMENT, company_slug TEXT, "
+               "opp_id TEXT, note TEXT, created_at TEXT)")
+
+
+class TipIn(BaseModel):
+    slug: str
+    opp_id: str
+    note: str = ""
+
+
+@app.post("/api/park/tips")
+def park_tip(t: TipIn):
+    """Blue Science Park tips a member about an opportunity. Simulated in the
+    prototype: the tip is shown on the member's page, no email is sent."""
+    _company(t.slug)
+    if not db.one("SELECT 1 FROM opportunities WHERE id=?", (t.opp_id,)):
+        raise HTTPException(404, "Unknown opportunity")
+    _tips_init()
+    if not db.one("SELECT 1 FROM park_tips WHERE company_slug=? AND opp_id=?", (t.slug, t.opp_id)):
+        db.execute("INSERT INTO park_tips (company_slug, opp_id, note, created_at) VALUES (?,?,?,?)",
+                   (t.slug, t.opp_id, t.note.strip()[:500], now_iso()))
+    return {"ok": True}
+
+
+@app.get("/api/companies/{slug}/tips")
+def company_tips(slug: str, lang: str = "sv"):
+    _company(slug)
+    _tips_init()
+    out = []
+    for t in db.rows("SELECT id, opp_id, note, created_at FROM park_tips WHERE company_slug=? ORDER BY id DESC", (slug,)):
+        o = db.one("SELECT * FROM opportunities WHERE id=?", (t["opp_id"],))
+        if o:
+            out.append(t | {"opportunity": _opp_public(o)})
+    _loc_opps([t["opportunity"] for t in out], _lang(lang), tc := Collector(_lang(lang)))
+    tc.run()
+    return out
+
+
+@app.delete("/api/companies/{slug}/tips/{tip_id}")
+def company_tip_delete(slug: str, tip_id: int):
+    _tips_init()
+    db.execute("DELETE FROM park_tips WHERE id=? AND company_slug=?", (tip_id, slug))
+    return {"ok": True}

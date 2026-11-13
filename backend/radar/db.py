@@ -217,6 +217,13 @@ def init() -> None:
             c.execute("ALTER TABLE opportunities ADD COLUMN title_sv TEXT")
         if "contacts" not in cols:
             c.execute("ALTER TABLE opportunities ADD COLUMN contacts TEXT")
+        if is_postgres():
+            chat_cols = {r["column_name"] for r in c.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name=?", ("chat_log",)).fetchall()}
+        else:
+            chat_cols = {r[1] for r in c.execute("PRAGMA table_info(chat_log)").fetchall()}
+        if "owner" not in chat_cols:  # conversations belong to one visitor or member, never the whole company
+            c.execute("ALTER TABLE chat_log ADD COLUMN owner TEXT")
 
 
 def rows(sql: str, params: tuple | list = ()) -> list[dict[str, Any]]:

@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AuthMenu from "@/components/AuthMenu";
+import { RoleChip, useRole } from "@/components/RoleGate";
 import { useI18n, type Key } from "@/lib/i18n";
 
 const LINKS: { href: string; key: Key }[] = [
   { href: "/", key: "nav.home" },
   { href: "/members", key: "nav.members" },
-  { href: "/trust", key: "nav.trust" },
-  { href: "/how", key: "nav.how" },
 ];
 
 /** Radar's own mark: a scope with one sweep line. Not Blue Science Park's logo. */
@@ -27,6 +26,11 @@ export function Mark({ className = "mark" }: { className?: string }) {
 export default function Masthead() {
   const path = usePathname();
   const { t, lang, setLang } = useI18n();
+  const { role } = useRole();
+  // The simulated view adds one link: the park's overview, or the company's own radar.
+  const links = [...LINKS];
+  if (role?.kind === "bsp") links.splice(2, 0, { href: "/park", key: "nav.park" });
+  if (role?.kind === "company") links.splice(2, 0, { href: `/c/${role.slug}`, key: "nav.myRadar" });
   return (
     <header className="topbar">
       <div className="shell topbar-inner">
@@ -36,8 +40,9 @@ export default function Masthead() {
           <span className="brand-sub">{t("brand.sub")}</span>
         </Link>
         <nav className="nav" aria-label="Main">
-          {LINKS.map((l) => {
-            const active = l.href === "/" ? path === "/" : path.startsWith(l.href) || (l.href === "/members" && path.startsWith("/c/"));
+          {links.map((l) => {
+            const own = role?.kind === "company" && path === `/c/${role.slug}`;
+            const active = l.href === "/" ? path === "/" : l.key === "nav.myRadar" ? own : path.startsWith(l.href) || (l.href === "/members" && path.startsWith("/c/") && !own);
             return (
               <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined}>
                 {t(l.key)}
@@ -45,6 +50,7 @@ export default function Masthead() {
             );
           })}
         </nav>
+        <RoleChip />
         <AuthMenu />
         <div className="langswitch" role="group" aria-label="Språk / Language">
           <button aria-pressed={lang === "sv"} onClick={() => setLang("sv")} lang="sv">SV</button>

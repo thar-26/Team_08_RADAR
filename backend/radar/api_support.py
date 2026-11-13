@@ -15,6 +15,19 @@ EXCLUDED = ("rejected", "outdated")
 DECISIONS = ("confirmed", "rejected", "outdated", "edited")
 
 
+def is_private(c: dict) -> bool:
+    """Priorities a company adds are private to the company until it publishes them."""
+    return c.get("visibility") == "private"
+
+
+def public_profile(profile: dict) -> dict:
+    """What anyone may see: no private additions, no claims the company marked
+    wrong or outdated."""
+    p = copy.deepcopy(profile)
+    p["claims"] = [c for c in p.get("claims", []) if not is_private(c) and c.get("review") not in EXCLUDED]
+    return p
+
+
 def carry_over_user_decisions(old: dict, new: dict) -> dict:
     """Keep the company's own decisions when public data is re-profiled:
     user-added claims stay, reviewed claims keep their review state and stamp."""
@@ -38,11 +51,12 @@ def _stamp(claim: dict, editor: dict | None) -> None:
 
 
 def apply_edit(profile: dict, action: str, claim_id: str | None, payload: dict, editor: dict | None = None) -> tuple[dict, str]:
-    """action: confirm | reject | outdated | edit | add | restore. Returns (new_profile, note)."""
+    """action: confirm | reject | outdated | edit | add | restore | publish | unpublish.
+    Returns (new_profile, note). Added statements are private unless payload["public"] is true."""
     p = copy.deepcopy(profile)
     claims = p["claims"]
     target = next((c for c in claims if c["id"] == claim_id), None) if claim_id else None
-    if action in ("confirm", "reject", "outdated", "edit", "restore") and not target:
+    if action in ("confirm", "reject", "outdated", "edit", "restore", "publish", "unpublish") and not target:
         raise ValueError("claim not found")
     if action == "confirm":
         target["review"] = "confirmed"
@@ -66,6 +80,11 @@ def apply_edit(profile: dict, action: str, claim_id: str | None, payload: dict, 
         target["origin"] = "user"
         target["note"] = f"Was: {old}"
         note = f"Corrected: {old} → {target['statement']}"
+    elif action in ("publish", "unpublish"):
+        if target.get("origin") != "user":
+            raise ValueError("only statements added by the company can be made private or public")
+        target["visibility"] = "public" if action == "publish" else "private"
+        note = f"{'Published' if action == 'publish' else 'Made private'}: {target['statement']}"
     elif action == "add":
         stmt = payload["statement"].strip()
         section = payload.get("section", "priorities")
@@ -73,6 +92,7 @@ def apply_edit(profile: dict, action: str, claim_id: str | None, payload: dict, 
             "id": hashlib.sha1(f"user|{section}|{stmt}|{now_iso()}".encode()).hexdigest()[:10],
             "section": section, "statement": stmt, "status": "company_confirmed", "evidence": [],
             "reasoning": "", "origin": "user", "review": "confirmed", "note": "Added by the company",
+            "visibility": "public" if payload.get("public") is True else "private",
         }
         claims.append(target)
         note = f"Added ({section}): {stmt}"

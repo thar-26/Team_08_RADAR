@@ -7,6 +7,8 @@ import AlertsTab from "@/components/company/AlertsTab";
 import ChatDrawer from "@/components/company/ChatDrawer";
 import FeedTab from "@/components/company/FeedTab";
 import ProfileTab from "@/components/company/ProfileTab";
+import { ParkTips, ThisWeek } from "@/components/company/ParkTips";
+import { useRole } from "@/components/RoleGate";
 import { ErrorNote, Skeleton, SourceLink, Toast, useFetch } from "@/components/ui";
 import { api, fmtDate, withLang, type CompanyResp, type Connection, type FeedItem } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
@@ -26,6 +28,8 @@ export default function CompanyPage({ params }: { params: Promise<{ slug: string
 
 function Company({ slug }: { slug: string }) {
   const { t, lang } = useI18n();
+  const { role } = useRole();
+  const ownView = role?.kind === "company" && role.slug === slug;
   const search = useSearchParams();
   const initial = search.get("tab");
   const [tab, setTabState] = useState<Tab>((TABS as readonly string[]).includes(initial ?? "") ? (initial as Tab) : "feed");
@@ -60,7 +64,15 @@ function Company({ slug }: { slug: string }) {
   const clearToast = useCallback(() => { setToastMsg(null); setToastAction(null); }, []);
   const onUndoable = useCallback((run: () => void) => setToastAction({ label: t("toast.undo"), run }), [t]);
 
-  if (company.error) return <section className="shell section"><ErrorNote error={company.error} /></section>;
+  // A member in the directory that has no Radar profile yet: say so, and link onwards.
+  if (company.status === 409 || company.status === 404) return (
+    <section className="section"><div className="shell" style={{ maxWidth: 760 }}>
+      <h1 style={{ fontSize: "clamp(34px,4vw,52px)" }}>{t(company.status === 404 ? "co.unknown" : "co.notProfiled")}</h1>
+      <p className="lead" style={{ marginTop: 14 }}>{t(company.status === 404 ? "co.unknownText" : "co.notProfiledText")}</p>
+      <p style={{ marginTop: 20 }}><Link className="btn" href="/members">{t("co.toMembers")}</Link></p>
+    </div></section>
+  );
+  if (company.error) return <section className="section"><div className="shell"><ErrorNote error={company.error} onRetry={company.reload} /></div></section>;
   const c = company.data;
   const p = c?.profile;
 
@@ -98,16 +110,24 @@ function Company({ slug }: { slug: string }) {
       <section className="shell" style={{ paddingBottom: 96 }}>
         {tab === "feed" && (
           feed.loading && !feed.data ? <div style={{ paddingTop: 32 }}><Skeleton h={360} /></div> :
-          feed.data && <FeedTab slug={slug} company={c?.name ?? ""} items={feed.data} onFeedback={refreshFeed} toast={setToast} onUndoable={onUndoable} />
+          feed.error ? <div style={{ paddingTop: 32 }}><ErrorNote error={feed.error} onRetry={refreshFeed} /></div> :
+          feed.data && <>
+            <div className={`role-panels ${ownView ? "two" : ""}`}>
+              {ownView && <ThisWeek items={feed.data} />}
+              <ParkTips slug={slug} />
+            </div>
+            <FeedTab slug={slug} company={c?.name ?? ""} items={feed.data} canEdit={!!c?.can_edit} onFeedback={refreshFeed} toast={setToast} onUndoable={onUndoable} />
+          </>
         )}
         {tab === "profile" && (p ? (
-          <ProfileTab slug={slug} company={c?.name ?? ""} profile={p} toast={setToast}
+          <ProfileTab slug={slug} company={c?.name ?? ""} profile={p} canEdit={!!c?.can_edit} toast={setToast}
             onSaved={(np, nf) => { company.setData({ ...c!, profile: np, version: c!.version + 1, updated_at: new Date().toISOString() }); feed.setData(nf); setTick((x) => x + 1); }} />
         ) : <div style={{ paddingTop: 32 }}><Skeleton h={360} /></div>)}
         {tab === "partners" && (
           <div style={{ paddingTop: 40 }}>
             <p className="lead" style={{ maxWidth: "62ch" }}>{t("part.lede")}</p>
             {conns.loading && <div style={{ marginTop: 24 }}><Skeleton h={260} /></div>}
+            {conns.error && <div style={{ marginTop: 24 }}><ErrorNote error={conns.error} onRetry={conns.reload} /></div>}
             <div className="list" style={{ marginTop: 32 }}>
               {(conns.data ?? []).map((x) => (
                 <div key={x.slug} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.3fr)", gap: 40, padding: "32px 0", borderBottom: "1px solid var(--line)" }}>
@@ -168,7 +188,7 @@ function Company({ slug }: { slug: string }) {
             </div>
           </div>
         )}
-        {tab === "alerts" && <AlertsTab slug={slug} toast={setToast} />}
+        {tab === "alerts" && <AlertsTab slug={slug} company={c?.name ?? ""} canEdit={!!c?.can_edit} toast={setToast} />}
       </section>
 
       {!chat && tab === "feed" && <button className="btn fab" onClick={() => setChat(true)}>{t("co.ask")}</button>}

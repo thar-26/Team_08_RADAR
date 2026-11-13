@@ -5,9 +5,13 @@ short-lived HS256 token signed with AUTH_SECRET. Every company endpoint then
 checks membership here, server-side: a user only ever sees companies they are
 an approved member of. Blue Science Park staff (RADAR_STAFF_EMAILS) see all.
 
-Membership is granted automatically when the user's verified email domain is
-the company's own website domain (e.g. name@saab.com -> Saab); otherwise it is a
-request that staff approve."""
+Membership is granted automatically only when the user's verified email domain
+is exactly the company's website domain, a subdomain of it, or an alias staff
+have approved (e.g. name@saabgroup.com -> Saab). Look-alike domains never match;
+everything else is a request that staff approve.
+
+Without a configured login provider nobody can edit: protected actions are
+disabled rather than opened to anonymous visitors."""
 from __future__ import annotations
 
 import os
@@ -37,6 +41,9 @@ CREATE TABLE IF NOT EXISTS users (
 """
 # Identity for internal calls (pipeline, warm-up), never reachable over HTTP.
 SYSTEM = {"email": "system@radar.local", "name": "system", "staff": True}
+# Extra email domains per company, approved by staff. More can be added in .env:
+# RADAR_COMPANY_DOMAINS=slug=domain1|domain2;slug2=domain3
+ALIASES = {"saab": {"saabgroup.com"}}
 FREE_MAIL = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "icloud.com", "yahoo.com", "proton.me", "protonmail.com"}
 
 
@@ -81,12 +88,26 @@ def site_domain(url: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
-def domain_matches(email: str, website: str) -> bool:
+def aliases(slug: str | None) -> set[str]:
+    out = set(ALIASES.get(slug or "", set()))
+    for part in os.getenv("RADAR_COMPANY_DOMAINS", "").split(";"):
+        k, _, v = part.partition("=")
+        if slug and k.strip() == slug:
+            out |= {d.strip().lower() for d in v.split("|") if d.strip()}
+    return out
+
+
+def domain_matches(email: str, website: str, slug: str | None = None) -> bool:
+    """Exact domain, a subdomain of it, or an approved alias. Never a look-alike
+    (techinova.com does not match techinova.se; saab.xyz does not match saab.com)."""
     d, s = domain_of(email), site_domain(website)
-    if not d or not s or d in FREE_MAIL:
+    if not d or d in FREE_MAIL:
         return False
-    # techinova.se vs techinova.com: compare the name part as well
-    return d == s or d.endswith("." + s) or s.endswith("." + d) or d.split(".")[0] == s.split(".")[0]
+    if d in aliases(slug):
+        return True
+    if not s:
+        return False
+    return d == s or d.endswith("." + s) or s.endswith("." + d)
 
 
 def memberships(email: str) -> list[dict]:
@@ -98,10 +119,12 @@ def memberships(email: str) -> list[dict]:
 
 
 def can_access(user: dict | None, slug: str) -> bool:
-    if not login_required():
-        return True  # prototype mode: no login provider configured
+    """May this user edit the company and see its private data (priorities,
+    saved items, feedback, chats, alerts)?"""
     if not user:
         return False
+    if not login_required():
+        return bool(user.get("staff"))  # no login provider: only internal/system calls
     if user["staff"]:
         return True
     init()
@@ -123,7 +146,7 @@ def request_access(user: dict, slug: str) -> dict:
     existing = db.one("SELECT status FROM memberships WHERE email=? AND slug=?", (user["email"], slug))
     if existing and existing["status"] == "approved":
         return {"status": "approved"}
-    auto = domain_matches(user["email"], company["website"])
+    auto = domain_matches(user["email"], company["website"], slug)
     status = "approved" if auto else "pending"
     db.upsert("memberships", {"email": user["email"], "slug": slug, "status": status, "via": "domain" if auto else "request",
                               "created_at": now_iso(), "decided_by": "domain match" if auto else None}, ["email", "slug"])
@@ -141,7 +164,7 @@ def suggestions(email: str) -> list[dict]:
     return [
         {"slug": c["slug"], "name": c["name"]}
         for c in db.rows("SELECT slug, name, website FROM companies WHERE slug NOT LIKE 'sim-%'")
-        if domain_matches(email, c["website"])
+        if domain_matches(email, c["website"], c["slug"])
     ]
 
 require = require_edit  # backwards-compatible name

@@ -16,6 +16,7 @@ import numpy as np
 from .. import db, embed, geo, llm
 from ..config import MODEL_REASONING, now_iso, today
 from ..schemas import MatchExplanation
+from ..api_support import is_private, public_profile
 from .profiler import profile_text
 
 PRIORITY_KINDS = {
@@ -48,7 +49,8 @@ def _company_size(profile: dict) -> str:
 def _priority_text(profile: dict) -> str:
     return " ".join(
         c["statement"] for c in profile.get("claims", [])
-        if c.get("origin") == "user" or c.get("status") == "company_confirmed" or c.get("review") in ("confirmed", "edited")
+        if (c.get("origin") == "user" or c.get("status") == "company_confirmed" or c.get("review") in ("confirmed", "edited"))
+        and c.get("review") not in ("rejected", "outdated")
     )
 
 
@@ -102,28 +104,34 @@ def _timeliness(o: dict) -> tuple[float, dict | None, int | None]:
 _CACHE: dict[tuple, list[dict]] = {}
 
 
-def _cache_key(slug: str, version: int) -> tuple:
+def _cache_key(slug: str, version: int, private: bool) -> tuple:
     fb = db.one("SELECT COUNT(*) AS n, MAX(created_at) AS t FROM feedback WHERE company_slug=?", (slug,)) or {}
     op = db.one("SELECT COUNT(*) AS n, MAX(fetched_at) AS t FROM opportunities") or {}
-    return (slug, version, fb.get("n"), fb.get("t"), op.get("n"), op.get("t"), today().isoformat())
+    return (slug, version, private, fb.get("n"), fb.get("t"), op.get("n"), op.get("t"), today().isoformat())
 
 
 def _is_company_stated(c: dict) -> bool:
     return c.get("origin") == "user" or c.get("status") == "company_confirmed" or c.get("review") in ("confirmed", "edited")
 
 
-def rank(slug: str) -> list[dict]:
+def rank(slug: str, private: bool = True) -> list[dict]:
     """Score every active opportunity for this company, 1-10, with the reasons.
 
     Five factors (0-1 each): technical/industry fit, the company's stated priorities,
     applicability (eligibility conflicts), geography and timeliness. The weighted sum
     is mapped to 1-10. This is the formula part only; final_score() blends in the
-    Matcher LLM's own reading where an explanation exists."""
+    Matcher LLM's own reading where an explanation exists.
+
+    private=False is the view for anyone outside the company: only the public
+    profile counts and the company's own feedback is ignored, so the list
+    reveals nothing the company has not published."""
     company = db.one("SELECT profile, profile_version FROM companies WHERE slug=?", (slug,))
     profile = db.loads(company and company["profile"])
     if not profile:
         return []
-    key = _cache_key(slug, company["profile_version"])
+    if not private:
+        profile = public_profile(profile)
+    key = _cache_key(slug, company["profile_version"], private)
     if key in _CACHE:
         return _CACHE[key]
     own = (profile.get("name") or "").lower()
@@ -147,7 +155,7 @@ def rank(slug: str) -> list[dict]:
     claim_w = np.array([1.6 if _is_company_stated(c) else 1.0 for c in claims])
     pvec = vec.get(f"prio:{slug}")
 
-    fb = db.rows("SELECT opp_id, value FROM feedback WHERE company_slug=?", (slug,))
+    fb = db.rows("SELECT opp_id, value FROM feedback WHERE company_slug=?", (slug,)) if private else []
     own_fb = {f["opp_id"]: f["value"] for f in fb if f["value"] in ("up", "down")}
     fb_vecs = {v: [vec.get(f"opp:{f['opp_id']}") for f in fb if f["value"] == v] for v in ("up", "down")}
     kind_pref = {k: bool(re.search(p, prio_text, re.I)) for k, p in PRIORITY_KINDS.items()}
@@ -271,6 +279,8 @@ Explain whether one opportunity could matter to one member company.
 - Only mention dates, amounts, contact persons and programme names that appear in the opportunity text.
   Never invent intermediate deadlines; refer to the stated deadline/date.
 - For testbeds and events there is no "call": the next step is to contact the testbed/organiser or register.
+- Never say a testbed is available, open or has free capacity: access and time slots must be confirmed with the operator.
+  A Vinnova-funded testbed project is a project, not necessarily a facility open to other companies.
 - If relevance is weak, say so honestly."""
 
 
@@ -280,7 +290,9 @@ def explain(slug: str, opp_id: str, *, use_cache: bool = True) -> dict:
     o = db.one("SELECT * FROM opportunities WHERE id=?", (opp_id,))
     prof_lines = [f"Summary: {profile['summary']}", f"Size: {profile['size_hint']} ({profile['size_basis']})"]
     for c in profile["claims"]:
-        if c.get("review") in ("rejected", "outdated"):
+        # Explanations are shared by every viewer, so they are written from the
+        # public profile only; private priorities never reach this text.
+        if c.get("review") in ("rejected", "outdated") or is_private(c):
             continue
         tag = "COMPANY-CONFIRMED" if (c.get("origin") == "user" or c.get("review") == "confirmed" or c["status"] == "company_confirmed") else c["status"].upper()
         prof_lines.append(f"- [{tag}] ({c['section']}) {c['statement']}")
@@ -301,7 +313,7 @@ def explain(slug: str, opp_id: str, *, use_cache: bool = True) -> dict:
 def refresh_matches(slug: str, *, explain_top: dict | None = None) -> list[dict]:
     """Rank and store; explain the top N (cached per profile version)."""
     explain_top = explain_top or {"funding": 10, "event": 6, "testbed": 4, "all": 20}
-    ranked = rank(slug)
+    ranked = rank(slug, private=False)
     company = db.one("SELECT profile_version FROM companies WHERE slug=?", (slug,))
     db.execute("DELETE FROM matches WHERE company_slug=?", (slug,))
     seen = {k: 0 for k in explain_top}

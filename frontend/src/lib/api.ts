@@ -64,6 +64,7 @@ export type Claim = {
   note: string;
   updated_by?: string;
   updated_at?: string;
+  visibility?: "private" | "public";
 };
 export type Source = { id: number; url: string; title: string; kind: string; retrieved_at: string; injection_flag: boolean; simulated: boolean };
 export type Profile = {
@@ -79,7 +80,7 @@ export type Profile = {
   generated_at: string;
   verifier: { facts_checked?: number; facts_verified?: number; downgraded?: number };
 };
-export type CompanyResp = { slug: string; name: string; website: string; bsp_page: string; version: number; updated_at: string; profile: Profile };
+export type CompanyResp = { slug: string; name: string; website: string; bsp_page: string; version: number; updated_at: string; can_edit: boolean; profile: Profile };
 export type Opportunity = {
   id: string;
   kind: "funding" | "event" | "testbed";
@@ -102,6 +103,7 @@ export type Opportunity = {
   fetched_at: string;
   simulated: boolean;
   manually_verified?: boolean;
+  title_sv?: string | null;
   region?: string;
   city?: string;
   contacts: { name: string; role: string; email: string; phone: string }[];
@@ -124,6 +126,8 @@ export type FeedItem = {
   fit: number;
   level: "strong" | "possible" | "weak";
   assessed: boolean;
+  /** The written explanation is being regenerated after a profile change. */
+  updating?: boolean;
   reasons: Reason[];
   missing: string[];
   components: Record<string, number>;

@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
 
-/** Every picture on the site is from an open collection and credited here. */
+/** Every picture on the site is from an open collection. The CC BY-SA photos are
+ *  credited in their captions on the homepage; the others are CC0. */
 export const PHOTOS = {
   aerial: { src: "/assets/karlskrona-from-plane.jpg", title: "Karlskrona from plane", by: "Peppigue", licence: "CC0", licenceUrl: "https://creativecommons.org/publicdomain/zero/1.0/deed.en", page: "https://commons.wikimedia.org/wiki/File:Karlskrona_from_plane.JPG" },
   ship: { src: "/assets/hms-trosso.jpg", title: "HMS Trossö", by: "Xiziz", licence: "CC BY-SA 3.0", licenceUrl: "https://creativecommons.org/licenses/by-sa/3.0/", page: "https://commons.wikimedia.org/w/index.php?curid=8945533" },
@@ -20,15 +22,10 @@ export default function Footer() {
           <p style={{ maxWidth: 560, margin: 0 }}>{t("footer.left")}</p>
           <div style={{ maxWidth: 560 }}>
             <p style={{ margin: 0 }}>{t("footer.right")}</p>
-            <p style={{ margin: "10px 0 0" }}>
-              {t("footer.photo")}{" "}
-              {Object.values(PHOTOS).map((p, i) => (
-                <span key={p.src}>
-                  {i > 0 && "; "}
-                  <a href={p.page}>“{p.title}”</a> by {p.by}, <a href={p.licenceUrl}>{p.licence}</a>
-                </span>
-              ))}
-              , via Wikimedia Commons.
+            <p className="footer-links">
+              <Link href="/trust">{t("nav.trust")}</Link>
+              <Link href="/how">{t("nav.how")}</Link>
+              <Link href="/evidence">{t("footer.evidence")}</Link>
             </p>
           </div>
         </div>

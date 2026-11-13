@@ -6,14 +6,26 @@ import { useI18n, type Key } from "@/lib/i18n";
 
 type Msg = { role: "user" | "assistant"; text: string; resp?: ChatResp };
 
+/** A random id per browser tab: an anonymous visitor's conversation is theirs
+ *  alone and is never shown to anyone else. */
+function chatSession(): string {
+  try {
+    let id = sessionStorage.getItem("radar-chat");
+    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem("radar-chat", id); }
+    return id;
+  } catch {
+    return (globalThis as { __radarChat?: string }).__radarChat ??= crypto.randomUUID();
+  }
+}
+
 /** Minimal, safe formatting: **bold** and [O1]-style citation markers. No HTML injection. */
 function Rich({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\[[OP]\d+\])/g);
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[OPM]\d+\])/g);
   return (
     <>
       {parts.map((p, i) =>
         p.startsWith("**") && p.endsWith("**") ? <b key={i} style={{ fontWeight: 600 }}>{p.slice(2, -2)}</b>
-        : /^\[[OP]\d+\]$/.test(p) ? <sup key={i} style={{ color: "var(--link)", fontSize: 11, fontWeight: 700 }}>{p}</sup>
+        : /^\[[OPM]\d+\]$/.test(p) ? <sup key={i} style={{ color: "var(--link)", fontSize: 11, fontWeight: 700 }}>{p}</sup>
         : <span key={i}>{p}</span>,
       )}
     </>
@@ -37,7 +49,7 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
     setText("");
     setBusy(true);
     try {
-      const r = await api<ChatResp>(`/api/companies/${slug}/chat`, { method: "POST", body: JSON.stringify({ message, lang }) });
+      const r = await api<ChatResp>(`/api/companies/${slug}/chat`, { method: "POST", body: JSON.stringify({ message, lang, session: chatSession() }) });
       setMsgs((m) => [...m, { role: "assistant", text: r.answer, resp: r }]);
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", text: t("chat.error", { e: (e as Error).message }) }]);
@@ -47,7 +59,7 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
   }
 
   async function clear() {
-    await api(`/api/companies/${slug}/chat`, { method: "DELETE" });
+    await api(`/api/companies/${slug}/chat?session=${chatSession()}`, { method: "DELETE" });
     setMsgs([]);
   }
 
