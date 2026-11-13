@@ -20,17 +20,18 @@ const SOURCES: [L, string][] = [
   [{ sv: "Medlemslista & evenemang", en: "Member list & events" }, "bluesciencepark.se (WordPress API)"],
   [{ sv: "Vinnovas utlysningar", en: "Vinnova calls" }, "data.vinnova.se (open data API)"],
   [{ sv: "EU-utlysningar", en: "EU calls" }, "EU Funding & Tenders search API"],
-  [{ sv: "Evenemang i regionen", en: "Regional events" }, "Tech Concept Lab, Almi Blekinge, NetPort"],
-  [{ sv: "Testbäddar", en: "Testbeds" }, "Marine Technology Center of Sweden (API)"],
-  [{ sv: "Företagsfakta", en: "Company facts" }, "Member websites, BSP member pages, Wikipedia"],
+  [{ sv: "Evenemang", en: "Events" }, "Vinnova, BTH, AI Sweden, Region Blekinge, Sydsvenska Industri- och Handelskammaren, Tech Concept Lab, Almi, NetPort"],
+  [{ sv: "Testbäddar i Blekinge", en: "Testbeds in Blekinge" }, "Marine Technology Center of Sweden (API)"],
+  [{ sv: "Nationella testbäddar", en: "National testbeds" }, "Vinnova open data (pågående finansierade testbäddsprojekt) + 8 testbäddar manuellt kontrollerade mot officiella sidor"],
+  [{ sv: "Företagsfakta", en: "Company facts" }, "Member websites, BSP member pages, Wikipedia, Bolagsverket"],
 ];
 
 const LIMITS: L[] = [
-  { sv: "Vissa webbplatser blockerar automatisk läsning (t.ex. ericsson.com, RISE). Radar kringgår inte blockeringar utan använder andra offentliga källor.", en: "Some sites block automated reading (e.g. ericsson.com, RISE). Radar does not bypass blocks and uses other public sources." },
+  { sv: "Vissa webbplatser blockerar automatisk läsning (t.ex. ericsson.com, RISE och Testbed Sweden). Radar kringgår inte blockeringar utan använder andra offentliga källor och en manuellt kontrollerad lista.", en: "Some sites block automated reading (e.g. ericsson.com, RISE and Testbed Sweden). Radar does not bypass blocks and uses other public sources and a manually verified list." },
+  { sv: "Matchningspoängen 1–10 är indikativ, ingen sannolikhet. Vikterna (35/25/20/10/10) är provisoriska och behöver kalibreras med Blue Science Parks personal.", en: "The 1–10 fit score is indicative, not a probability. The weights (35/25/20/10/10) are provisional and need calibrating with Blue Science Park staff." },
   { sv: "Kravkontrollen är vägledande. Behörighet avgörs av finansiären.", en: "Requirement checks are indicative. Eligibility is decided by the funder." },
-  { sv: "Få regionala evenemangssidor publicerar maskinläsbara datum; finansiering täcks betydligt bättre än evenemang.", en: "Few regional event pages publish machine-readable dates; funding is covered much better than events." },
-  { sv: "Inloggningen är simulerad. I drift: Blue Science Parks SSO och åtkomstkontroll per företag.", en: "Login is simulated. In production: Blue Science Park SSO and per-company access control." },
-  { sv: "Mejlutskick är simulerade tills SMTP-inställningar läggs in.", en: "Email sending is simulated until SMTP settings are added." },
+  { sv: "Lediga tider i testbäddar bekräftas aldrig av Radar. Kontakta operatören.", en: "Radar never confirms testbed availability. Contact the operator." },
+  { sv: "Inloggning (Google) används bara för att rätta ett företags profil. I drift: Blue Science Parks egen inloggning och medlemsregister.", en: "Sign-in (Google) is only used to correct a company's profile. In production: Blue Science Park's own sign-in and member register." },
 ];
 
 export default function How() {
@@ -56,7 +57,7 @@ export default function How() {
         </div>
         <div className="two-col" style={{ marginTop: 40 }}>
           <div>
-            <h2 style={{ marginBottom: 14 }}>{t("how.sources")}</h2>
+            <h2 id="testbeds" style={{ marginBottom: 14 }}>{t("how.sources")}</h2>
             <div className="table-wrap"><table className="table"><tbody>
               {SOURCES.map(([a, b]) => <tr key={a.en}><td><b style={{ fontWeight: 600 }}>{a[lang]}</b></td><td className="note">{b}</td></tr>)}
             </tbody></table></div>

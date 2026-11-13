@@ -15,7 +15,7 @@ type Report = {
 type TrustResp = { report: Report | null; injection_demo: { page: { url: string; text: string; injection_score: number } | null; profile: Profile | null } };
 const PRESETS: Key[] = ["trust.p1", "trust.p2", "trust.p3", "trust.p4"];
 
-/** What the brief asks for — a quality and boundary check — in plain language:
+/** What the brief asks for (a quality and boundary check) in plain language:
  *  four results first, a box to test it yourself, and the full tables on request. */
 export default function Quality() {
   const { t, lang } = useI18n();
@@ -73,6 +73,7 @@ export default function Quality() {
             ))}
           </div>
           <p className="note" style={{ marginTop: 16 }}>{t("q.measured", { date: fmtDate(r.generated_at, lang) })}</p>
+          <p style={{ marginTop: 8 }}><a href="/evidence">{t("q.evidenceLink")} →</a></p>
           </div>
         </section>
       )}

@@ -101,6 +101,9 @@ export type Opportunity = {
   programme: string | null;
   fetched_at: string;
   simulated: boolean;
+  manually_verified?: boolean;
+  region?: string;
+  city?: string;
   contacts: { name: string; role: string; email: string; phone: string }[];
   contact_links: { label: string; url: string }[];
 };
@@ -113,9 +116,16 @@ export type Explanation = {
   next_step: string;
   error?: string;
 };
+export type Reason = { key: string; p?: Record<string, string | number> };
 export type FeedItem = {
   rank: number;
   score: number;
+  /** Indicative 1-10 fit score shown to the user (formula blended with the Matcher's reading). */
+  fit: number;
+  level: "strong" | "possible" | "weak";
+  assessed: boolean;
+  reasons: Reason[];
+  missing: string[];
   components: Record<string, number>;
   anchor_claim: string;
   opportunity: Opportunity;
@@ -141,6 +151,7 @@ export type Connection = {
   bsp_page: string;
   website: string;
   similarity: number;
+  profiled?: boolean;
   headline: string;
   shared: string[];
   complementary: string;
@@ -154,7 +165,7 @@ export type GuardResult = {
 };
 export type ChatResp = {
   answer: string;
-  citations: { ref: string; title: string; url: string; date: string; kind: string }[];
+  citations: { ref: string; title: string; url: string; date: string; kind: string; slug?: string; profiled?: boolean }[];
   next_step: string;
   refer_to_staff: boolean;
   staff_contact?: string;
@@ -162,7 +173,10 @@ export type ChatResp = {
 };
 
 export type Alerts = {
-  subscription: { email: string; kinds: string[]; min_relevance: string; lang: string; consent_at: string; active: boolean } | null;
+  subscription: { email: string; kinds: string[]; min_relevance: string; lang: string; consent_at: string; active: boolean; frequency?: string; last_digest_at?: string | null } | null;
+  scheduler: { active: boolean; configured: boolean; last_run: string | null; interval_minutes: number };
+  allowlist: boolean;
+  allowed: boolean;
   outbox: { id: number; email: string; subject: string; items: number; status: "preview" | "sent" | "failed"; detail: string; created_at: string }[];
   smtp_configured: boolean;
   new?: number;
@@ -189,3 +203,6 @@ export const host = (u: string) => {
     return u;
   }
 };
+
+/** A member found by expertise or technology (public information only). */
+export type MemberHit = { slug: string; name: string; score: number; snippet: string; industry: string; profiled: boolean; website: string; bsp_page: string };

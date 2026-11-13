@@ -151,6 +151,15 @@ CREATE TABLE IF NOT EXISTS llm_cache (
     response TEXT,
     created_at TEXT
 );
+CREATE TABLE IF NOT EXISTS llm_usage (       -- tokens and time per model call (cost evidence; no prices stored)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT, model TEXT, purpose TEXT, cached INTEGER,
+    prompt_tokens INTEGER, completion_tokens INTEGER, ms INTEGER
+);
+CREATE TABLE IF NOT EXISTS relevance_ratings (  -- team ratings of the top 10, for the hit rate
+    company_slug TEXT, opp_id TEXT, rater TEXT, rating TEXT, fit REAL, rank INTEGER, at TEXT,
+    PRIMARY KEY (company_slug, opp_id, rater)
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     step TEXT,

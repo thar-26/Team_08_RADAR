@@ -18,3 +18,5 @@ data/cache/
 data/radar.db*
 frontend/.next/
 .taste-skill/
+frontend/.next-build/
+data/demo_snapshot.db

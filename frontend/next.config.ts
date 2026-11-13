@@ -8,6 +8,8 @@ import type { NextConfig } from "next";
 // otherwise return that cached result and ignore the root .env.
 loadEnvConfig(path.resolve(process.cwd(), ".."), process.env.NODE_ENV !== "production", console, true);
 
-const nextConfig: NextConfig = {};
+// A separate output folder lets a production build run while the dev server
+// (which owns .next) is still running.
+const nextConfig: NextConfig = { distDir: process.env.NEXT_DIST_DIR || ".next" };
 
 export default nextConfig;

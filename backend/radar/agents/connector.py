@@ -101,7 +101,54 @@ def suggest(slug: str, top: int = 4) -> list[dict]:
             ).model_dump()
             db.upsert("connections", {"a": a, "b": b, "score": sim, "basis": json.dumps(basis, ensure_ascii=False), "created_at": now_iso()}, ["a", "b"])
         if basis.get("worth_suggesting"):
-            out.append({"slug": other, "similarity": round(sim, 3), **basis})
+            profiled = db.one("SELECT profile IS NOT NULL AS p FROM companies WHERE slug=?", (other,))
+            out.append({"slug": other, "similarity": round(sim, 3), "profiled": bool(profiled and profiled["p"]), **basis})
         if len(out) >= top:
             break
     return out
+
+
+def _sentences(text: str) -> list[str]:
+    import re
+
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text)
+    return [p.strip() for p in parts if 30 <= len(p.strip()) <= 400][:40]
+
+
+def search(query: str, *, top: int = 8, exclude: str | None = None) -> list[dict]:
+    """Semantic search over members' PUBLIC descriptions (expertise, technology,
+    markets). Returns the best-matching members with the sentence that matched."""
+    query = (query or "").strip()[:300]
+    if len(query) < 2:
+        return []
+    members = db.rows("SELECT slug, name, website, bsp_page, profile IS NOT NULL AS profiled FROM companies WHERE slug NOT LIKE 'sim-%'")
+    texts = {m["slug"]: public_text(m["slug"]) or m["name"] for m in members}
+    sents = {m["slug"]: _sentences(texts[m["slug"]]) for m in members}
+    vec = embed.vectors(
+        {f"member:{s}": t for s, t in texts.items()}
+        | {f"msent:{s}:{i}": x for s, xs in sents.items() for i, x in enumerate(xs)}
+    )
+    q = embed.one(query)
+    out = []
+    for m in members:
+        if m["slug"] == exclude:
+            continue
+        whole = float(vec[f"member:{m['slug']}"] @ q)
+        best, snippet = 0.0, ""
+        for i, x in enumerate(sents[m["slug"]]):
+            s = float(vec[f"msent:{m['slug']}:{i}"] @ q)
+            if s > best:
+                best, snippet = s, x
+        score = 0.5 * whole + 0.5 * best
+        t = texts[m["slug"]]
+        out.append({
+            "slug": m["slug"], "name": m["name"], "score": round(score, 3), "snippet": snippet,
+            "industry": t.split("Bransch: ")[1].split(".")[0] if "Bransch: " in t else "",
+            "profiled": bool(m["profiled"]), "website": m["website"], "bsp_page": m["bsp_page"],
+        })
+    out.sort(key=lambda r: -r["score"])
+    # Keep clear matches only: within reach of the best one and above a floor.
+    if out:
+        floor = max(0.25, out[0]["score"] - 0.18)
+        out = [r for r in out if r["score"] >= floor]
+    return out[:top]

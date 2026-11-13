@@ -112,10 +112,11 @@ function Company({ slug }: { slug: string }) {
               {(conns.data ?? []).map((x) => (
                 <div key={x.slug} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.3fr)", gap: 40, padding: "32px 0", borderBottom: "1px solid var(--line)" }}>
                   <div>
-                    <h2 style={{ fontSize: "clamp(26px,2.4vw,34px)" }}>{x.name}</h2>
+                    <h2 style={{ fontSize: "clamp(26px,2.4vw,34px)" }}>{x.profiled ? <Link href={`/c/${x.slug}`} style={{ color: "inherit" }}>{x.name}</Link> : x.name}</h2>
                     <p style={{ fontSize: 18, margin: "12px 0 14px" }}>{x.headline}</p>
                     <div className="row note" style={{ gap: 18 }}>
                       <span>{t("part.similarity", { n: x.similarity.toFixed(2) })}</span>
+                      {x.profiled && <Link href={`/c/${x.slug}`}>{t("mem.radarProfile")}</Link>}
                       <SourceLink url={x.bsp_page} label={t("part.memberPage")} />
                       {x.website && <SourceLink url={x.website} />}
                     </div>
@@ -126,6 +127,10 @@ function Company({ slug }: { slug: string }) {
                     <h4 style={{ margin: "0 0 8px", fontSize: 15 }}>{t("part.complement")}</h4>
                     <p style={{ margin: "0 0 14px" }}>{x.complementary}</p>
                     <p className="note" style={{ margin: 0 }}>{x.caution}</p>
+                    <p style={{ margin: "14px 0 0" }}>
+                      <b>{t("feed.next")}:</b> {t("ms.next")}{" "}
+                      <a href="https://www.bluesciencepark.se/kontakt/kontaktpersoner/" target="_blank" rel="noreferrer">{t("ct.bsp")} ↗</a>
+                    </p>
                   </div>
                 </div>
               ))}

@@ -4,6 +4,7 @@ Run:  uvicorn radar.api:app --reload --port 8000   (from backend/)"""
 from __future__ import annotations
 
 import json
+import os
 import threading
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -13,12 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import auth, db
+from . import geo, auth, db
 from .auth import current_user
 from .agents import concierge, connector, matcher, notifier, profiler
 from .api_support import apply_edit
 from .config import DATA, DEMO_COMPANIES, now_iso, today
-from .translate import Collector
+from .translate import Collector, translate
 
 app = FastAPI(title="Radar API", version="0.1.0")
 app.add_middleware(
@@ -37,6 +38,8 @@ SOURCE_INFO = {
     "almi": {"name": "Almi Blekinge events", "url": "https://www.almi.se/blekinge/evenemang/"},
     "netport": {"name": "NetPort events", "url": "https://www.netport.se/evenemang/"},
     "mtc": {"name": "Marine Technology Center of Sweden – testbeds", "url": "https://www.mtcos.se/"},
+    "national": {"name": "National testbeds (manually verified list)", "url": "/how#testbeds"},
+    "vinnova_projects": {"name": "Vinnova open data – funded testbed projects", "url": "https://data.vinnova.se/"},
     "vinnova_events": {"name": "Vinnova calendar", "url": "https://www.vinnova.se/kalender/"},
     "bth": {"name": "Blekinge Institute of Technology events", "url": "https://www.bth.se/evenemang/"},
     "aisweden": {"name": "AI Sweden events", "url": "https://www.ai.se/en/events"},
@@ -60,6 +63,11 @@ def _opp_public(o: dict) -> dict:
     o["simulated"] = bool(o.get("simulated"))
     o["contacts"] = db.loads(o.get("contacts"), []) or []
     o["contact_links"] = CONTACT_LINKS.get(o["source"], [])
+    if o["source"] in ("national", "vinnova_projects"):  # each testbed has its own operator
+        o["contact_links"] = [{"label": "operator" if o["source"] == "national" else "coordinator", "url": o["apply_url"] or o["url"]}]
+    o["manually_verified"] = o["source"] == "national"
+    if o["kind"] in ("event", "testbed"):  # for the region/city/format filters
+        o["region"], o["city"] = geo.region_of(o.get("location"), o.get("location_mode"), o.get("source"))
     return o
 
 
@@ -95,11 +103,12 @@ def _lang(lang: str | None) -> str:
 
 def _loc_opps(opps: list[dict], lang: str, tc: Collector) -> None:
     for o in opps:
-        native_sv = SWEDISH_ORIGIN.get(o["kind"], set())
+        # National testbed texts are written in English (Vinnova projects carry their own Swedish title).
+        native_sv = set() if o["source"] in ("national", "vinnova_projects") else SWEDISH_ORIGIN.get(o["kind"], set())
         if lang == "sv":
             if o.get("title_sv"):
                 o["title"] = o["title_sv"]
-            elif "title" not in native_sv and o["source"] != "eu":  # EU topic titles are official names
+            elif "title" not in native_sv and o["source"] not in ("eu", "national"):  # official names stay as they are
                 tc.add(o, "title")
             if "summary" not in native_sv:
                 tc.add(o, "summary")
@@ -171,6 +180,16 @@ def companies():
         r["demo"] = bool(r["demo"])
         r["profiled"] = bool(r["profiled"])
     return rows
+
+
+@app.get("/api/members/search")
+def member_search(q: str, lang: str = "sv", exclude: str | None = None):
+    """Find members by expertise or technology, from public descriptions only."""
+    out = connector.search(q, top=8, exclude=exclude)
+    # Member pages are mostly Swedish and facts mostly English: translate both ways (cached).
+    for r, txt in zip(out, translate([r["snippet"] for r in out], _lang(lang))):
+        r["snippet"] = txt
+    return out
 
 
 @app.get("/api/companies/{slug}")
@@ -268,7 +287,10 @@ def timeline(slug: str, user: dict | None = Depends(current_user)):
 
 
 @app.get("/api/companies/{slug}/feed")
-def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv", user: dict | None = Depends(current_user)):
+def feed(slug: str, kind: str | None = None, limit: int = 30, lang: str = "sv", user: dict | None = Depends(current_user)):
+    """Ranked recommendations with an indicative 1-10 fit score and its reasons:
+    the best `limit` of each kind, in one list ordered by score. The page shows
+    the top 10 and reveals the rest on request."""
     _company(slug)
     lang = _lang(lang)
     ranked = matcher.rank(slug)
@@ -276,37 +298,41 @@ def feed(slug: str, kind: str | None = None, limit: int = 12, lang: str = "sv", 
     fb = {}
     for f in db.rows("SELECT opp_id, value FROM feedback WHERE company_slug=?", (slug,)):
         fb.setdefault(f["opp_id"], []).append(f["value"])
-    per_kind_limit = {"funding": limit, "event": 6, "testbed": 6}
-    counts: dict[str, int] = {}
+    scored = []
+    for r in ranked:
+        if (kind and r["kind"] != kind) or "down" in fb.get(r["opp_id"], []):
+            continue
+        exp = db.loads(stored[r["opp_id"]]["explanation"]) if r["opp_id"] in stored else None
+        if exp and exp.get("error"):
+            exp = None
+        fit, level = matcher.final_score(r, exp)
+        scored.append((fit, r, exp, level))
+    scored.sort(key=lambda x: -x[0])
+    per_kind: dict[str, int] = {}
+    keep = []
+    for x in scored:
+        per_kind[x[1]["kind"]] = per_kind.get(x[1]["kind"], 0) + 1
+        # All upcoming events are kept so the region and format filters have something to filter.
+        if per_kind[x[1]["kind"]] <= (100 if x[1]["kind"] == "event" else max(1, min(limit, 100))):
+            keep.append(x)
     items = []
-    for i, r in enumerate(ranked):
-        if kind and r["kind"] != kind:
-            continue
-        if "down" in fb.get(r["opp_id"], []):
-            continue
-        counts[r["kind"]] = counts.get(r["kind"], 0) + 1
-        if counts[r["kind"]] > per_kind_limit.get(r["kind"], limit):
-            continue
+    for fit, r, exp, level in keep:
         o = db.one("SELECT * FROM opportunities WHERE id=?", (r["opp_id"],))
-        m = stored.get(r["opp_id"])
         items.append({
-            "rank": len(items) + 1, "score": r["score"], "components": r["components"], "anchor_claim": r["anchor_claim"],
-            "opportunity": _opp_public(o),
-            "explanation": db.loads(m["explanation"]) if m else None,
-            "feedback": fb.get(r["opp_id"], []),
+            "rank": len(items) + 1, "score": r["score"], "fit": fit, "level": level, "assessed": exp is not None,
+            "components": r["components"], "reasons": [dict(x, p=dict(x.get("p") or {})) for x in r["reasons"]],
+            "missing": r["missing"], "anchor_claim": r["anchor_claim"],
+            "opportunity": _opp_public(o), "explanation": exp, "feedback": fb.get(r["opp_id"], []),
         })
-    # The Matcher's own judgement (strong/possible/weak) orders the list first,
-    # the numeric score breaks ties: a "strong fit" never sits below a "possible" one.
-    tier = {"strong": 0, "possible": 1, None: 2, "weak": 3}
-    items.sort(key=lambda i: (tier.get((i["explanation"] or {}).get("relevance")), -i["score"]))
-    for n, i in enumerate(items, 1):
-        i["rank"] = n
     tc = Collector(lang)
     _loc_opps([i["opportunity"] for i in items], lang, tc)
     for i in items:
         _loc_explanation(i["explanation"], tc)
         if lang == "sv":
             tc.add(i, "anchor_claim")
+            for x in i["reasons"]:
+                if x["p"].get("claim"):
+                    tc.add(x["p"], "claim")
     tc.run()
     return items
 
@@ -318,7 +344,7 @@ def explain(slug: str, opp_id: str, lang: str = "sv", user: dict | None = Depend
         raise HTTPException(404, "Unknown opportunity")
     exp = matcher.explain(slug, opp_id)
     r = next((x for x in matcher.rank(slug) if x["opp_id"] == opp_id), None)
-    db.upsert("matches", {"company_slug": slug, "opp_id": opp_id, "score": r["score"] if r else 0,
+    db.upsert("matches", {"company_slug": slug, "opp_id": opp_id, "score": matcher.final_score(r, exp)[0] if r else 0,
                           "components": json.dumps((r or {}).get("components", {})), "explanation": json.dumps(exp, ensure_ascii=False),
                           "profile_version": _company(slug)["profile_version"], "created_at": now_iso()}, ["company_slug", "opp_id"])
     tc = Collector(_lang(lang))
@@ -434,20 +460,24 @@ class AlertsIn(BaseModel):
     min_relevance: str = "possible"
     lang: str = "sv"
     consent: bool = False
+    frequency: str = "instant"  # instant | weekly
 
 
 @app.get("/api/companies/{slug}/alerts")
 def alerts_status(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
     notifier.init()
-    sub = db.one("SELECT email, kinds, min_relevance, lang, consent_at, active FROM subscriptions WHERE company_slug=?", (slug,))
+    sub = db.one("SELECT email, kinds, min_relevance, lang, consent_at, active, frequency, last_digest_at FROM subscriptions WHERE company_slug=?", (slug,))
     if sub:
         sub["kinds"] = json.loads(sub["kinds"])
         sub["active"] = bool(sub["active"])
     outbox = db.rows(
         "SELECT id, email, subject, items, status, detail, created_at FROM outbox WHERE company_slug=? ORDER BY id DESC LIMIT 20", (slug,)
     )
-    return {"subscription": sub, "outbox": outbox, "smtp_configured": notifier.smtp_configured()}
+    return {"subscription": sub, "outbox": outbox, "smtp_configured": notifier.smtp_configured(),
+            "scheduler": notifier.scheduler_status(),
+            "allowlist": bool(os.getenv("RADAR_MAIL_ALLOWLIST", "").strip()),
+            "allowed": bool(sub) and notifier.allowed_recipient(sub["email"])}
 
 
 @app.post("/api/companies/{slug}/alerts")
@@ -457,7 +487,7 @@ def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current
         raise HTTPException(400, "Consent is required to receive emails")
     notifier.init()
     try:
-        result = notifier.subscribe(slug, a.email, a.kinds, a.min_relevance, a.lang)
+        result = notifier.subscribe(slug, a.email, a.kinds, a.min_relevance, a.lang, a.frequency)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     return result | alerts_status(slug, user=user)
@@ -467,6 +497,22 @@ def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current
 def alerts_check(slug: str, user: dict | None = Depends(current_user)):
     _company(slug)
     return notifier.run(slug) | alerts_status(slug, user=user)
+
+
+@app.post("/api/companies/{slug}/alerts/digest")
+def alerts_digest(slug: str, user: dict | None = Depends(current_user)):
+    """Send the weekly digest now (manual trigger for demos and staff)."""
+    _company(slug)
+    notifier.init()
+    if not db.one("SELECT 1 FROM subscriptions WHERE company_slug=? AND active=1", (slug,)):
+        raise HTTPException(400, "Subscribe first")
+    return notifier.run(slug, digest=True) | alerts_status(slug, user=user)
+
+
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    notifier.init()
+    notifier.start_scheduler()
 
 
 @app.delete("/api/companies/{slug}/alerts")
@@ -625,3 +671,69 @@ def admin_decide(d: DecideIn, user: dict | None = Depends(current_user)):
         raise HTTPException(403, "Staff only")
     auth.decide(user, d.email, d.slug, d.approve)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- evidence
+EVIDENCE_COMPANIES = ["ocean-harvesting", "techinova", "ericsson", "embeddedart", "saab"]
+RATINGS = {"relevant": 1.0, "partly": 0.5, "not": 0.0}
+
+
+def _rating_summary() -> list[dict]:
+    out = []
+    for slug in EVIDENCE_COMPANIES:
+        rows = db.rows("SELECT rating, rater FROM relevance_ratings WHERE company_slug=?", (slug,))
+        if not rows:
+            continue
+        name = (db.one("SELECT name FROM companies WHERE slug=?", (slug,)) or {}).get("name", slug)
+        score = sum(RATINGS.get(r["rating"], 0) for r in rows)
+        out.append({"slug": slug, "name": name, "rated": len(rows), "raters": len({r["rater"] for r in rows}),
+                    "relevant": sum(r["rating"] == "relevant" for r in rows), "partly": sum(r["rating"] == "partly" for r in rows),
+                    "hit_rate": round(score / len(rows), 3)})
+    return out
+
+
+@app.get("/api/evidence")
+def evidence():
+    """Team-rated relevance of the top 10 and measured model usage (tokens, time). No prices are invented."""
+    usage = db.rows(
+        "SELECT model, purpose, COUNT(*) AS calls, SUM(cached) AS cached, SUM(prompt_tokens) AS prompt_tokens, "
+        "SUM(completion_tokens) AS completion_tokens, AVG(CASE WHEN cached=0 THEN ms END) AS avg_ms, "
+        "MIN(at) AS since FROM llm_usage GROUP BY model, purpose ORDER BY SUM(prompt_tokens) + SUM(completion_tokens) DESC"
+    )
+    for u in usage:
+        u["avg_ms"] = round(u["avg_ms"] or 0)
+    summary = _rating_summary()
+    total = sum(s["rated"] for s in summary)
+    overall = round(sum(s["hit_rate"] * s["rated"] for s in summary) / total, 3) if total else None
+    companies = [{"slug": s, "name": (db.one("SELECT name FROM companies WHERE slug=?", (s,)) or {}).get("name", s)}
+                 for s in EVIDENCE_COMPANIES if db.one("SELECT 1 FROM companies WHERE slug=? AND profile IS NOT NULL", (s,))]
+    return {"companies": companies, "ratings": summary, "overall_hit_rate": overall, "rated_total": total, "usage": usage}
+
+
+@app.get("/api/evidence/{slug}")
+def evidence_top(slug: str, rater: str = "", lang: str = "sv"):
+    items = feed(slug, lang=lang)[:10]
+    mine = {r["opp_id"]: r["rating"] for r in db.rows(
+        "SELECT opp_id, rating FROM relevance_ratings WHERE company_slug=? AND rater=?", (slug, rater.strip()[:60]))}
+    return [{"rank": i["rank"], "fit": i["fit"], "level": i["level"], "opp_id": i["opportunity"]["id"],
+             "title": i["opportunity"]["title"], "kind": i["opportunity"]["kind"], "url": i["opportunity"]["url"],
+             "why": (i["explanation"] or {}).get("why", ""), "rating": mine.get(i["opportunity"]["id"])} for i in items]
+
+
+class Rating(BaseModel):
+    slug: str
+    opp_id: str
+    rater: str
+    rating: str
+    fit: float = 0
+    rank: int = 0
+
+
+@app.post("/api/evidence/rate")
+def evidence_rate(r: Rating):
+    rater = r.rater.strip()[:60]
+    if not rater or r.rating not in RATINGS or r.slug not in EVIDENCE_COMPANIES:
+        raise HTTPException(400, "rater, a rating (relevant/partly/not) and a demo company are required")
+    db.upsert("relevance_ratings", {"company_slug": r.slug, "opp_id": r.opp_id, "rater": rater, "rating": r.rating,
+                                     "fit": r.fit, "rank": r.rank, "at": now_iso()}, ["company_slug", "opp_id", "rater"])
+    return evidence()

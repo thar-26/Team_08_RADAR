@@ -91,7 +91,9 @@ export default function ChatDrawer({ slug, name, open, onClose }: { slug: string
                 {m.resp.citations.map((c) => (
                   <div key={c.ref} className="stamp" style={{ display: "flex" }}>
                     <b style={{ color: "var(--link)" }}>[{c.ref}]</b>
-                    <a href={c.url} target="_blank" rel="noreferrer">{c.title.slice(0, 64)}{c.title.length > 64 ? "…" : ""} · {host(c.url)} ↗</a>
+                    {c.kind === "member" && c.slug && c.profiled
+                      ? <a href={`/c/${c.slug}`}>{c.title} · {t("mem.radarProfile")}</a>
+                      : <a href={c.url} target="_blank" rel="noreferrer">{c.title.slice(0, 64)}{c.title.length > 64 ? "…" : ""} · {host(c.url)} ↗</a>}
                   </div>
                 ))}
               </div>

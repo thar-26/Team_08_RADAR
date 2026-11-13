@@ -15,6 +15,7 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
   const [level, setLevel] = useState("possible");
   const [mailLang, setMailLang] = useState<string>(lang);
   const [consent, setConsent] = useState(false);
+  const [freq, setFreq] = useState("weekly");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
@@ -33,6 +34,7 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
         setKinds(d.subscription.kinds);
         setLevel(d.subscription.min_relevance);
         setMailLang(d.subscription.lang);
+        setFreq(d.subscription.frequency || "instant");
       }
       if (d.outbox[0]) setPreview(d.outbox[0].id);
     });
@@ -79,6 +81,13 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
             ))}
           </div>
         </div>
+        <div style={{ marginTop: 14 }}>
+          <span className="field">{t("al.freq")}</span>
+          <div className="seg" role="group">
+            <button aria-pressed={freq === "weekly"} onClick={() => setFreq("weekly")}>{t("al.weekly")}</button>
+            <button aria-pressed={freq === "instant"} onClick={() => setFreq("instant")}>{t("al.instant")}</button>
+          </div>
+        </div>
         <div className="row" style={{ marginTop: 14, gap: 18, alignItems: "flex-start" }}>
           <div>
             <span className="field">{t("al.level")}</span>
@@ -102,17 +111,24 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
         {err && <div className="banner" style={{ marginTop: 12 }}>{err}</div>}
         <div className="row" style={{ marginTop: 16 }}>
           <button className="btn" disabled={busy || !consent || !email.includes("@") || !kinds.length}
-            onClick={() => call(`/api/companies/${slug}/alerts`, { method: "POST", body: JSON.stringify({ email, kinds, min_relevance: level, lang: mailLang, consent }) },
+            onClick={() => call(`/api/companies/${slug}/alerts`, { method: "POST", body: JSON.stringify({ email, kinds, min_relevance: level, lang: mailLang, consent, frequency: freq }) },
               (d) => toast(d.new ? t("al.newFound", { n: d.new }) : t("al.none")))}>
             {busy ? "…" : active ? t("al.update") : t("al.subscribe")}
           </button>
           {!active && (!consent || !email.includes("@")) && <span className="note">{t("al.needs")}</span>}
           {active && (
             <>
-              <button className="btn navy" disabled={busy}
-                onClick={() => call(`/api/companies/${slug}/alerts/check`, { method: "POST" }, (d) => toast(d.new ? t("al.newFound", { n: d.new }) : t("al.none")))}>
-                {t("al.check")}
-              </button>
+              {sub!.frequency === "weekly" ? (
+                <button className="btn navy" disabled={busy}
+                  onClick={() => call(`/api/companies/${slug}/alerts/digest`, { method: "POST" }, (d) => toast(d.new ? t("al.newFound", { n: d.new }) : t("al.none")))}>
+                  {t("al.digestNow")}
+                </button>
+              ) : (
+                <button className="btn navy" disabled={busy}
+                  onClick={() => call(`/api/companies/${slug}/alerts/check`, { method: "POST" }, (d) => toast(d.new ? t("al.newFound", { n: d.new }) : t("al.none")))}>
+                  {t("al.check")}
+                </button>
+              )}
               <button className="btn danger" disabled={busy}
                 onClick={() => confirm(t("al.confirmStop")) && call(`/api/companies/${slug}/alerts`, { method: "DELETE" }, () => toast(t("al.unsubscribed")))}>
                 {t("al.stop")}
@@ -124,6 +140,13 @@ export default function AlertsTab({ slug, toast }: { slug: string; toast: (m: st
         <div className={`banner ${data.smtp_configured ? "info" : ""}`} style={{ marginTop: 16 }}>
           {data.smtp_configured ? t("al.smtpOn") : t("al.smtpOff")}
         </div>
+        <dl className="sched">
+          <dt>{t("al.schedule")}</dt>
+          <dd>{data.scheduler.active ? t("al.schedOn", { n: data.scheduler.interval_minutes }) : t("al.schedOff")}</dd>
+          {data.scheduler.last_run && <><dt>{t("al.lastRun")}</dt><dd>{fmtDate(data.scheduler.last_run, lang)}</dd></>}
+          {sub?.last_digest_at && <><dt>{t("al.lastDigest")}</dt><dd>{fmtDate(sub.last_digest_at, lang)}</dd></>}
+          {data.allowlist && <><dt>{t("al.safety")}</dt><dd>{data.allowed ? t("al.allowYes") : t("al.allowNo")}</dd></>}
+        </dl>
       </div>
 
       <div>

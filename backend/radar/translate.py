@@ -57,12 +57,20 @@ def translate(texts: list[str], lang: str) -> list[str]:
         return texts
     out = list(texts)
     todo: dict[str, list[int]] = {}
+    # One query for all cached translations (a lookup per string was the slow part of a page load).
+    keys = {t: _key(t, lang) for t in set(texts) if t and t.strip()}
+    cached: dict[str, str] = {}
+    kl = list(keys.values())
+    for start in range(0, len(kl), 400):
+        part = kl[start:start + 400]
+        for r in db.rows(f"SELECT key, response FROM llm_cache WHERE key IN ({','.join('?' * len(part))})", tuple(part)):
+            cached[r["key"]] = r["response"]
     for i, t in enumerate(texts):
         if not t or not t.strip():
             continue
-        hit = db.one("SELECT response FROM llm_cache WHERE key=?", (_key(t, lang),))
-        if hit and not _wrong_language(hit["response"], lang):
-            out[i] = hit["response"]
+        hit = cached.get(keys[t])
+        if hit and not _wrong_language(hit, lang):
+            out[i] = hit
         else:
             todo.setdefault(t, []).append(i)
     pending = list(todo)

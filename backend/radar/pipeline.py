@@ -57,6 +57,8 @@ def collect() -> None:
     step("eu", funding.collect_eu)
     step("events", events.collect_events)
     step("testbeds", testbeds.collect_testbeds)
+    step("national testbeds", testbeds.collect_national)
+    step("vinnova testbeds", testbeds.collect_vinnova_testbeds)
     for slug in DEMO_COMPANIES:
         step(f"crawl {slug}", websites.crawl_company, slug)
     step("simulated", seed_simulated)

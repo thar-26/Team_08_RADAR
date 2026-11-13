@@ -1,0 +1,94 @@
+{
+  "_about": "Hand-verified national testbeds outside Blekinge. Each entry was checked against the official page in 'url' on the date in 'verified'. Testbed Sweden and ri.se block automated access, so these pages are not scraped; descriptions are short summaries written by the Radar team. Availability (free time slots, prices) is never confirmed here: contact the operator.",
+  "verified": "2026-11-13",
+  "testbeds": [
+    {
+      "id": "astazero",
+      "name": "AstaZero proving ground",
+      "organisation": "RISE Research Institutes of Sweden",
+      "location": "Sandhult (Borås)",
+      "region": "vastra_gotaland",
+      "capabilities": "Full-scale test environment for automated vehicles and traffic safety: rural roads, a city area, multilane roads, a high-speed area and a mine-vehicle test area, plus a 6G and edge-computing facility for connected vehicles and drones. Euro NCAP accredited.",
+      "industries": "automotive, autonomous vehicles, connectivity, 5G/6G, drones, mining vehicles",
+      "url": "https://astazero.ri.se/",
+      "contact": "https://astazero.ri.se/en/contact-us/"
+    },
+    {
+      "id": "kristineberg",
+      "name": "Kristineberg Center for marine research and innovation",
+      "organisation": "University of Gothenburg, Chalmers, IVL, KTH and RISE",
+      "location": "Fiskebäckskil (Lysekil)",
+      "region": "vastra_gotaland",
+      "capabilities": "Marine research station with test and demonstration facilities and laboratories on the west coast, including a testbed for materials in the marine environment (antifouling and corrosion protection, natural seawater exposure) and marine biology and aquaculture research.",
+      "industries": "marine technology, ocean, aquaculture, materials, antifouling, corrosion, environmental monitoring",
+      "url": "https://www.ivl.se/english/ivl/about-ivl/research-stations-and-test-beds/kristineberg-center.html",
+      "contact": "https://www.ivl.se/english/ivl/about-ivl/research-stations-and-test-beds/kristineberg-center.html"
+    },
+    {
+      "id": "lysekil-wave",
+      "name": "Lysekil wave power research site",
+      "organisation": "Uppsala University",
+      "location": "Lysekil, about 2 km offshore",
+      "region": "vastra_gotaland",
+      "capabilities": "Grid-connected offshore research site for wave energy converters, with permit for arrays of up to 20 devices, substations and cables; also used for studies of how wave power affects the marine environment.",
+      "industries": "wave energy, ocean energy, offshore renewable energy, marine environment",
+      "url": "https://www.uu.se/en/department/electrical-engineering/collaboration/popular-science-presentations/the-lysekil-project",
+      "contact": "https://www.uu.se/en/department/electrical-engineering"
+    },
+    {
+      "id": "swic",
+      "name": "SWIC – Sjöstadsverket Water Innovation Centre",
+      "organisation": "IVL Swedish Environmental Research Institute (with KTH)",
+      "location": "Stockholm (Loudden)",
+      "region": "stockholm",
+      "capabilities": "Pilot and test facility for wastewater treatment and water reuse: municipalities, industry and academia test treatment processes, resource recovery and removal of micropollutants at pilot scale.",
+      "industries": "water treatment, wastewater, water reuse, cleantech, environmental technology, sensors for water",
+      "url": "https://www.ivl.se/english/ivl/project/sjostadsverket.html",
+      "contact": "https://www.ivl.se/english/ivl/project/sjostadsverket.html"
+    },
+    {
+      "id": "esrange",
+      "name": "Esrange Space Center",
+      "organisation": "SSC Swedish Space Corporation",
+      "location": "Kiruna",
+      "region": "other_se",
+      "capabilities": "Launch and test site within Europe's largest overland test range: rocket engine test firing, sounding rockets, stratospheric balloons, reusability tests for launchers and testing of exploration vehicles and systems.",
+      "industries": "space, aerospace, rocket propulsion, satellites, drones, defence",
+      "url": "https://sscspace.com/esrange/",
+      "contact": "https://sscspace.com/esrange/"
+    },
+    {
+      "id": "revere",
+      "name": "ReVeRe – Resource for Vehicle Research",
+      "organisation": "Chalmers University of Technology",
+      "location": "Gothenburg",
+      "region": "vastra_gotaland",
+      "capabilities": "Laboratory for research on self-driving vehicles, active safety and vehicle dynamics: several real vehicles that can be fitted with sensors, data logging and communication equipment, for developing, testing, verifying and demonstrating models, algorithms and technologies in real or conditioned traffic.",
+      "industries": "automotive, autonomous vehicles, sensors, active safety, vehicle dynamics",
+      "url": "https://www.chalmers.se/en/research/infrastructure/revere/",
+      "contact": "https://www.chalmers.se/en/research/infrastructure/revere/"
+    },
+    {
+      "id": "electricity",
+      "name": "ElectriCity demo arena",
+      "organisation": "ElectriCity (industry, research and the City of Gothenburg)",
+      "location": "Gothenburg (Lindholmen)",
+      "region": "vastra_gotaland",
+      "capabilities": "Demo arena in a real city where industry, research and society develop and test solutions for electrified transport: buses, construction machines, ferries and heavy vehicles on renewable electricity.",
+      "industries": "electromobility, public transport, electric ferries, charging, smart city, maritime electrification",
+      "url": "https://www.electricitygoteborg.se/en",
+      "contact": "https://www.electricitygoteborg.se/en"
+    },
+    {
+      "id": "kth-liveinlab",
+      "name": "KTH Live-In Lab",
+      "organisation": "KTH Royal Institute of Technology",
+      "location": "Stockholm",
+      "region": "stockholm",
+      "capabilities": "Full-scale test environment for the building and property sector, from building and installations to residents and facility management; multiple testbeds for products and services, tested alone or in a real system, plus an open data pool.",
+      "industries": "built environment, proptech, energy efficiency, IoT sensors, smart buildings",
+      "url": "https://www.liveinlab.kth.se/",
+      "contact": "https://www.liveinlab.kth.se/"
+    }
+  ]
+}

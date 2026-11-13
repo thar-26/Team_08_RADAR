@@ -10,7 +10,7 @@ const roboto = Roboto({ variable: "--font-roboto", subsets: ["latin", "latin-ext
 
 export const metadata: Metadata = {
   title: "Radar · för Blue Science Parks medlemmar",
-  description: "AI-agenter som förstår Blue Science Parks medlemmar och hittar finansiering, evenemang, testbäddar och partner — med källa på varje påstående.",
+  description: "AI-agenter som förstår Blue Science Parks medlemmar och hittar finansiering, evenemang, testbäddar och partner, med källa på varje påstående.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

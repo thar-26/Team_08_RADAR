@@ -80,6 +80,17 @@ def _call(**kwargs):
     raise RuntimeError("LLM rate limit: gave up after retries")
 
 
+def _usage(model: str, purpose: str, resp=None, ms: int = 0, cached: bool = False) -> None:
+    """Log tokens and time for every call (and cache hits), for the cost evidence."""
+    u = getattr(resp, "usage", None)
+    try:
+        db.execute("INSERT INTO llm_usage (at, model, purpose, cached, prompt_tokens, completion_tokens, ms) VALUES (?,?,?,?,?,?,?)",
+                   (now_iso(), model, purpose, int(cached), getattr(u, "prompt_tokens", 0) or 0,
+                    getattr(u, "completion_tokens", 0) or 0, ms))
+    except Exception:  # noqa: BLE001 - logging must never break a request
+        pass
+
+
 def structured(
     schema: Type[T],
     system: str,
@@ -99,7 +110,9 @@ def structured(
         hit = db.one("SELECT response FROM llm_cache WHERE key=?", (key,))
         if hit:
             try:
-                return schema.model_validate_json(hit["response"])
+                obj = schema.model_validate_json(hit["response"])
+                _usage(model, schema.__name__, cached=True)
+                return obj
             except ValidationError:
                 pass
     last_err: Exception | None = None
@@ -111,6 +124,7 @@ def structured(
             system + "\n\nReturn ONLY a JSON object that validates against this JSON schema:\n" + json.dumps(json_schema)
         )
         try:
+            t0 = time.perf_counter()
             resp = _call(
                 model=model,
                 messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": user}],
@@ -125,6 +139,7 @@ def structured(
         except BadRequestError as e:  # json_validate_failed etc.
             last_err = e
             continue
+        _usage(model, schema.__name__, resp, int((time.perf_counter() - t0) * 1000))
         content = resp.choices[0].message.content or ""
         try:
             obj = schema.model_validate_json(content)
@@ -150,7 +165,9 @@ def injection_score(text: str) -> float:
         if hit:
             score = float(hit["response"])
         else:
+            t0 = time.perf_counter()
             resp = _call(model=MODEL_PROMPT_GUARD, messages=[{"role": "user", "content": w}])
+            _usage(MODEL_PROMPT_GUARD, "PromptGuard", resp, int((time.perf_counter() - t0) * 1000))
             try:
                 score = float((resp.choices[0].message.content or "0").strip())
             except ValueError:
