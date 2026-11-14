@@ -417,7 +417,7 @@ details[open] > summary::before { content: "− "; }
 .park-tip { padding: 12px 0 0; }
 .park-tip a b { font-weight: 700; }
 /* Logos, field picker and the visitor explore page */
-.logo { display: inline-block; object-fit: contain; background: var(--white); padding: 2px; flex: none; vertical-align: middle; }
+.logo { display: inline-block; object-fit: contain; background: var(--white); padding: 3px; flex: none; vertical-align: middle; image-rendering: auto; }
 .field-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; margin: 28px 0 0; }
 .field-pick label { display: grid; gap: 4px; font-size: 13px; font-weight: 700; color: var(--ink-2); min-width: 240px; flex: 0 1 320px; }
 .field-pick .select { padding: 9px 12px; font-size: 15px; font-weight: 400; }
@@ -430,4 +430,4 @@ details[open] > summary::before { content: "− "; }
 .ex-opp { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; padding: 18px 0; }
 .ex-opp a.title { display: block; font-weight: 700; font-size: 17px; margin-top: 4px; color: var(--ink); }
 .ex-member { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
-.list-row.ex-opp { grid-template-columns: 34px minmax(0, 1fr) !important; align-items: start; }
+.list-row.ex-opp { grid-template-columns: 48px minmax(0, 1fr) !important; align-items: start; }

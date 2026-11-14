@@ -192,7 +192,7 @@ function FeedItemRow({ slug, company, item, rank, canEdit, onFeedback, toast, on
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="row" style={{ gap: 10 }}>
-          <Logo k={o.logo} size={26} />
+          <Logo k={o.logo} size={38} />
           <KindPill kind={o.kind} />
           {o.simulated && <span className="tag warn">{t("prof.simulated")}</span>}
           {o.manually_verified && <span className="tag" title={t("tb.verifiedTitle")}>{t("tb.verified")}</span>}

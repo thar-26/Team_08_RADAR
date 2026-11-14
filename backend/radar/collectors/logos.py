@@ -44,6 +44,7 @@ def _save(key: str, url: str, client: httpx.Client) -> bool:
         old.unlink()
     path = LOGOS / f"{key}.{EXT[ctype]}"
     path.write_bytes(r.content)
+    path = trim(path)  # remove empty borders so the logo fills its space
     db.upsert("logos", {"key": key, "file": path.name, "source_url": url, "fetched_at": now_iso()}, ["key"])
     return True
 
@@ -155,3 +156,53 @@ def path_for(key: str) -> Path | None:
 def known() -> set[str]:
     init()
     return {r["key"] for r in db.rows("SELECT key FROM logos")}
+
+
+def trim(path: Path) -> Path:
+    """Crop the empty border (transparent or white) around a logo, so a small logo on a
+    big canvas fills its space. Raster images only; SVGs are left as they are."""
+    from PIL import Image
+
+    if path.suffix.lower() == ".svg":
+        return path
+    try:
+        im = Image.open(path)
+        im.load()
+    except Exception:  # noqa: BLE001 - unreadable image: keep it as it is
+        return path
+    im = im.convert("RGBA")
+    px = im.load()
+    w, h = im.size
+    xs, ys = [], []
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a > 24 and not (r > 238 and g > 238 and b > 238):
+                xs.append(x)
+                ys.append(y)
+    if not xs:
+        return path
+    box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
+    if (box[2] - box[0]) * (box[3] - box[1]) > 0.9 * w * h:
+        return path  # already tight
+    m = max(2, int(0.06 * max(box[2] - box[0], box[3] - box[1])))
+    box = (max(0, box[0] - m), max(0, box[1] - m), min(w, box[2] + m), min(h, box[3] + m))
+    out = path.with_suffix(".png")
+    im.crop(box).save(out)
+    if out != path:
+        path.unlink()
+    return out
+
+
+def trim_all() -> int:
+    """Trim every stored logo and record the new file names."""
+    init()
+    n = 0
+    for row in db.rows("SELECT key, file FROM logos"):
+        p = LOGOS / row["file"]
+        if p.exists():
+            q = trim(p)
+            if q.name != row["file"]:
+                db.execute("UPDATE logos SET file=? WHERE key=?", (q.name, row["key"]))
+                n += 1
+    return n

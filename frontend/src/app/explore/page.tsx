@@ -80,7 +80,7 @@ function Explore() {
               <div className="list" style={{ marginTop: 12 }}>
                 {data.opportunities.slice(0, n).map((o) => (
                   <div key={o.id} className="ex-opp list-row" style={{ display: "grid" }}>
-                    <Logo k={o.logo} size={32} />
+                    <Logo k={o.logo} size={40} />
                     <div style={{ minWidth: 0 }}>
                       <div className="row" style={{ gap: 8 }}>
                         <KindPill kind={o.kind} />

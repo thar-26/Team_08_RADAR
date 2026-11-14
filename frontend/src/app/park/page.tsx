@@ -104,7 +104,7 @@ function FitList({ oppId }: { oppId: string }) {
   const o = fit.data.opportunity;
   return (
     <div style={{ marginTop: 28 }}>
-      <div className="row" style={{ gap: 10 }}><Logo k={o.logo} size={28} /><KindPill kind={o.kind} /><span className="note">{o.source_name}</span></div>
+      <div className="row" style={{ gap: 10 }}><Logo k={o.logo} size={38} /><KindPill kind={o.kind} /><span className="note">{o.source_name}</span></div>
       <a href={o.url} target="_blank" rel="noreferrer" className="feed-title">{o.title}</a>
       <div className="list" style={{ marginTop: 16 }}>
         {fit.data.members.map((m) => (

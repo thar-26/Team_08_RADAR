@@ -38,13 +38,16 @@ export function Toast({ msg, onDone, action }: { msg: string | null; onDone: () 
   );
 }
 
-/** An organisation's logo (member, funder or organiser), served by the API. Hidden if missing. */
+/** An organisation's logo (member, funder or organiser), served by the API. Hidden if missing.
+ *  Fixed height, natural width: wide member logos may be wider, square site icons stay square. */
 export function Logo({ k, size = 28 }: { k?: string | null; size?: number }) {
   if (!k) return null;
+  const wide = k.startsWith("member-");
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img className="logo" src={`${API}/api/logos/${encodeURIComponent(k)}`} alt="" width={size} height={size} loading="lazy"
-      style={{ width: size, height: size }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+    <img className="logo" src={`${API}/api/logos/${encodeURIComponent(k)}?v=2`} alt="" height={size} loading="lazy"
+      style={{ height: size, width: "auto", minWidth: wide ? size : undefined, maxWidth: wide ? size * 2.8 : size * 1.2 }}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
   );
 }
 
