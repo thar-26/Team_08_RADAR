@@ -55,7 +55,8 @@ Blue Science Park.
 - **Explore** (`/explore`), for visitors who are not members: pick one or more fields and see open
   calls, events and testbeds in them, plus the members working there. No sign-in, no profile needed.
 - **Logos:** member logos from Blue Science Park's member directory, and the funder's or organiser's
-  logo on every funding, event and testbed card. Downloaded once into `data/logos/` by the pipeline.
+  logo on every funding, event and testbed card. Downloaded once into `data/logos/` by the pipeline;
+  empty borders around a logo are trimmed automatically so it stays readable at a small size.
 - Swedish by default, with a full **SV / EN** switch.
 
 **Two views for the demo** (chosen on the start screen, see below)
@@ -64,6 +65,7 @@ Blue Science Park.
   event or testbed, see which members it fits best and **Send tip**.
 - **Member company:** **My radar** in the menu, **This week and next** (the company's upcoming deadlines
   and events) and **Tips from Blue Science Park** on its page.
+- **Visitor:** *Continue as a visitor* opens **Explore**, and visitors get **Explore** in the menu.
 
 ## Challenge requirements
 
@@ -308,7 +310,7 @@ Photos: Wikimedia Commons (CC0 and CC BY-SA, credited in their captions; see
 | | What |
 |---|---|
 | (Team kick-off and practice, allowed by the organisers) | Data collection, the ten agents, profiles with fact/inferred labels and verification, ranking, Concierge and Guard, Swedish/English interface, email alerts, profile corrections with Google sign-in, Bolagsverket facts, Postgres support |
-| **Built during the hackathon** | 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start |
+| **Built during the hackathon** | 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start; fields (domains) and the Field filter; the visitor Explore page; member and organiser logos |
 | **Reused, not built by us** | Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq, a multilingual embedding model, public APIs and data, Blue Science Park's colours as a visual reference |
 
 ## Known limits and next steps
