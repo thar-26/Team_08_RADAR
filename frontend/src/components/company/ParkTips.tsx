@@ -1,6 +1,6 @@
 "use client";
 
-import { KindPill, When, useFetch } from "@/components/ui";
+import { KindPill, Logo, When, useFetch } from "@/components/ui";
 import { api, daysUntil, fmtDate, withLang, type FeedItem, type Opportunity } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
@@ -16,7 +16,7 @@ export function ParkTips({ slug }: { slug: string }) {
       <h3>{t("tips.title")}</h3>
       {tips.data.map((x) => (
         <div key={x.id} className="park-tip">
-          <div className="row" style={{ gap: 8 }}><KindPill kind={x.opportunity.kind} /><span className="note">{t("tips.sent", { date: fmtDate(x.created_at, lang) })}</span></div>
+          <div className="row" style={{ gap: 8 }}><Logo k={x.opportunity.logo} size={24} /><KindPill kind={x.opportunity.kind} /><span className="note">{t("tips.sent", { date: fmtDate(x.created_at, lang) })}</span></div>
           <a href={x.opportunity.url} target="_blank" rel="noreferrer"><b>{x.opportunity.title}</b></a>
           <div className="note"><When o={x.opportunity} /></div>
           {x.note && <p style={{ margin: "4px 0 0" }}>{x.note}</p>}
@@ -42,7 +42,7 @@ export function ThisWeek({ items }: { items: FeedItem[] }) {
       {!soon.length && <p className="note" style={{ margin: "8px 0 0" }}>{t("week.none")}</p>}
       {soon.map(({ i, d }) => (
         <div key={i.opportunity.id} className="park-tip">
-          <div className="row" style={{ gap: 8 }}><KindPill kind={i.opportunity.kind} /><span className="note">{i.fit.toFixed(1)}/10</span></div>
+          <div className="row" style={{ gap: 8 }}><Logo k={i.opportunity.logo} size={24} /><KindPill kind={i.opportunity.kind} /><span className="note">{i.fit.toFixed(1)}/10</span></div>
           <a href={i.opportunity.url} target="_blank" rel="noreferrer"><b>{i.opportunity.title}</b></a>
           <div className="note">{d === 0 ? t("feed.today") : t("feed.days", { n: d ?? 0 })}</div>
         </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ErrorNote, KindPill, Skeleton, useFetch } from "@/components/ui";
+import { ErrorNote, KindPill, Logo, Skeleton, useFetch } from "@/components/ui";
 import { api, fmtDate, withLang, type Opportunity } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
@@ -59,7 +59,7 @@ export default function Park() {
             </tr></thead>
             <tbody>{ov.data.map((r) => (
               <tr key={r.slug}>
-                <td><Link href={`/c/${r.slug}`}><b>{r.name}</b></Link></td>
+                <td><span className="name-logo"><Logo k={`member-${r.slug}`} size={28} /><Link href={`/c/${r.slug}`}><b>{r.name}</b></Link></span></td>
                 <td className="num"><b>{r.strong}</b></td>
                 <td className="num">{r.possible}</td>
                 <td>{r.next_deadline ? <button className="textbtn" onClick={() => setPick(r.next_deadline!.id)}>{fmtDate(r.next_deadline.date, lang)} · {r.next_deadline.title.slice(0, 60)}</button> : "–"}</td>
@@ -104,7 +104,7 @@ function FitList({ oppId }: { oppId: string }) {
   const o = fit.data.opportunity;
   return (
     <div style={{ marginTop: 28 }}>
-      <div className="row" style={{ gap: 10 }}><KindPill kind={o.kind} /><span className="note">{o.source_name}</span></div>
+      <div className="row" style={{ gap: 10 }}><Logo k={o.logo} size={28} /><KindPill kind={o.kind} /><span className="note">{o.source_name}</span></div>
       <a href={o.url} target="_blank" rel="noreferrer" className="feed-title">{o.title}</a>
       <div className="list" style={{ marginTop: 16 }}>
         {fit.data.members.map((m) => (
@@ -115,7 +115,7 @@ function FitList({ oppId }: { oppId: string }) {
               <span className="fit-label">{t(`fit.${m.level}` as Key)}</span>
             </div>
             <div style={{ minWidth: 0 }}>
-              <Link href={`/c/${m.slug}`}><b>{m.name}</b></Link>
+              <span className="name-logo"><Logo k={`member-${m.slug}`} size={30} /><Link href={`/c/${m.slug}`}><b>{m.name}</b></Link></span>
               {m.why && <p className="note" style={{ margin: "4px 0 0" }}>{m.why}</p>}
             </div>
             <button className="btn small" disabled={sent[m.slug] || m.level === "weak"} onClick={() => tip(m.slug)}>

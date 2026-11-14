@@ -21,3 +21,4 @@ frontend/.next/
 frontend/.next-build/
 data/demo_snapshot.db
 .claude/
+data/logos/

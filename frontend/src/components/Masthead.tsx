@@ -31,6 +31,7 @@ export default function Masthead() {
   const links = [...LINKS];
   if (role?.kind === "bsp") links.splice(2, 0, { href: "/park", key: "nav.park" });
   if (role?.kind === "company") links.splice(2, 0, { href: `/c/${role.slug}`, key: "nav.myRadar" });
+  if (!role || role.kind === "visitor") links.splice(2, 0, { href: "/explore", key: "nav.explore" });
   return (
     <header className="topbar">
       <div className="shell topbar-inner">

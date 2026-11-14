@@ -101,7 +101,7 @@ function RoleDialog({ onChoose, onClose }: { onChoose: (r: Role) => void; onClos
         <p className="gate-note">{t("gate2.simulated")}{" "}
           <Link href="/login" onClick={() => onChoose({ kind: "visitor" })}>{t("gate2.realLogin")}</Link>
         </p>
-        <button className="textbtn gate-skip" onClick={() => { onChoose({ kind: "visitor" }); }}>{t("gate2.visitor")}</button>
+        <button className="textbtn gate-skip" onClick={() => { onChoose({ kind: "visitor" }); router.push("/explore"); }}>{t("gate2.visitor")}</button>
       </div>
     </div>
   );

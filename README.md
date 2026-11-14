@@ -48,6 +48,14 @@ Blue Science Park.
   click **Profile member** to build a profile for a member that has none.
 - **Event filters** by region, city and format; **national testbeds** (Vinnova open data plus a
   hand-verified list) next to the testbeds at Marine Technology Center in Karlskrona.
+- **Fields (domains):** 14 fields such as Energy, Marine & ocean, Digital & AI and Defence. Every
+  opportunity and member is sorted into 1–3 fields with the local embedding model (no AI cost).
+  On a company's page, **Field** shows opportunities in any field, also outside the company's own,
+  still with its fit score.
+- **Explore** (`/explore`), for visitors who are not members: pick one or more fields and see open
+  calls, events and testbeds in them, plus the members working there. No sign-in, no profile needed.
+- **Logos:** member logos from Blue Science Park's member directory, and the funder's or organiser's
+  logo on every funding, event and testbed card. Downloaded once into `data/logos/` by the pipeline.
 - Swedish by default, with a full **SV / EN** switch.
 
 **Two views for the demo** (chosen on the start screen, see below)

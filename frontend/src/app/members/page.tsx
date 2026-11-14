@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ErrorNote, Skeleton, useFetch } from "@/components/ui";
+import { ErrorNote, Logo, Skeleton, useFetch } from "@/components/ui";
 import { api, withLang, type Member, type MemberHit } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
@@ -84,7 +84,7 @@ export default function Members() {
               {hits.map((h) => (
                 <div key={h.slug} className="list-row hit">
                   <div>
-                    <h3 style={{ fontSize: 22 }}>{h.profiled ? <Link href={`/c/${h.slug}`} style={{ color: "inherit" }}>{h.name}</Link> : h.name}</h3>
+                    <h3 style={{ fontSize: 22 }} className="name-logo"><Logo k={`member-${h.slug}`} size={34} />{h.profiled ? <Link href={`/c/${h.slug}`} style={{ color: "inherit" }}>{h.name}</Link> : h.name}</h3>
                     <span className="note">{h.industry}</span>
                   </div>
                   <div>
@@ -112,7 +112,8 @@ export default function Members() {
         <div className="list">
           {list.map((m) => (
             <div key={m.slug} id={m.slug} className="list-row" style={{ gridTemplateColumns: "minmax(0,1.2fr) minmax(0,1fr) auto", padding: "18px 0" }}>
-              <h3 style={{ fontSize: 22 }}>
+              <h3 style={{ fontSize: 22 }} className="name-logo">
+                <Logo k={m.logo} size={34} />
                 {m.profiled ? <Link href={`/c/${m.slug}`} style={{ color: "inherit" }}>{m.name}</Link> : m.name}
               </h3>
               <span className="note" style={{ fontSize: 15 }}>

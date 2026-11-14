@@ -103,6 +103,8 @@ export type Opportunity = {
   fetched_at: string;
   simulated: boolean;
   manually_verified?: boolean;
+  logo?: string | null;
+  domains?: string[];
   title_sv?: string | null;
   region?: string;
   city?: string;
@@ -136,7 +138,8 @@ export type FeedItem = {
   explanation: Explanation | null;
   feedback: string[];
 };
-export type Member = { slug: string; name: string; website: string; bsp_page: string; demo: boolean; profiled: boolean; industry: string };
+export type Member = { slug: string; name: string; website: string; bsp_page: string; demo: boolean; profiled: boolean; industry: string; logo?: string | null; domains?: string[] };
+export type Domain = { key: string; name: string; opportunities: number; members: number };
 export type Overview = {
   members: number;
   profiled: { slug: string; name: string; profile_version: number; updated_at: string }[];

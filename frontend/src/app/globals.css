@@ -416,3 +416,17 @@ details[open] > summary::before { content: "− "; }
 @media (max-width: 860px) { .role-panels.two { grid-template-columns: 1fr; } }
 .park-tip { padding: 12px 0 0; }
 .park-tip a b { font-weight: 700; }
+/* Logos, field picker and the visitor explore page */
+.logo { display: inline-block; object-fit: contain; background: var(--white); padding: 2px; flex: none; vertical-align: middle; }
+.field-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; margin: 28px 0 0; }
+.field-pick label { display: grid; gap: 4px; font-size: 13px; font-weight: 700; color: var(--ink-2); min-width: 240px; flex: 0 1 320px; }
+.field-pick .select { padding: 9px 12px; font-size: 15px; font-weight: 400; }
+.name-logo { display: inline-flex; align-items: center; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chips button { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.chips .count { margin-left: 6px; opacity: .7; font-variant-numeric: tabular-nums; }
+.ex-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 48px; margin-top: 36px; }
+@media (max-width: 960px) { .ex-grid { grid-template-columns: 1fr; } }
+.ex-opp { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; padding: 18px 0; }
+.ex-opp a.title { display: block; font-weight: 700; font-size: 17px; margin-top: 4px; color: var(--ink); }
+.ex-member { display: flex; align-items: center; gap: 12px; padding: 10px 0; }

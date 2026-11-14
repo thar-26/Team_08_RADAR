@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { daysUntil, fmtDate, host, type Opportunity } from "@/lib/api";
+import { API, daysUntil, fmtDate, host, type Opportunity } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 export function Skeleton({ h = 16, w = "100%" }: { h?: number; w?: number | string }) {
@@ -35,6 +35,16 @@ export function Toast({ msg, onDone, action }: { msg: string | null; onDone: () 
         </div>
       )}
     </div>
+  );
+}
+
+/** An organisation's logo (member, funder or organiser), served by the API. Hidden if missing. */
+export function Logo({ k, size = 28 }: { k?: string | null; size?: number }) {
+  if (!k) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img className="logo" src={`${API}/api/logos/${encodeURIComponent(k)}`} alt="" width={size} height={size} loading="lazy"
+      style={{ width: size, height: size }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
   );
 }
 

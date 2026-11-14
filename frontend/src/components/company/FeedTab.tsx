@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KindPill, When } from "@/components/ui";
-import { api, API, fmtDate, host, withLang, type Explanation, type FeedItem, type Opportunity, type Reason } from "@/lib/api";
+import { KindPill, Logo, When } from "@/components/ui";
+import { api, API, fmtDate, host, withLang, type Domain, type Explanation, type FeedItem, type Opportunity, type Reason } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 const FILTERS = ["all", "funding", "event", "testbed"] as const;
@@ -11,12 +11,23 @@ const PAGE = 10;
 const REGIONS = ["blekinge", "stockholm", "vastra_gotaland", "skane", "other_se", "abroad", "online", "unknown"] as const;
 const FORMATS = ["online", "in_person", "hybrid", "unknown"] as const;
 
-export default function FeedTab({ slug, company, items, canEdit, onFeedback, toast, onUndoable }: {
+export default function FeedTab({ slug, company, items: ownItems, canEdit, onFeedback, toast, onUndoable }: {
   slug: string; company: string; items: FeedItem[]; canEdit: boolean; onFeedback: () => void; toast: (m: string) => void; onUndoable: (undo: () => void) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  // Look beyond the company's own fields: any field, still with the company's fit score.
+  const [fields, setFields] = useState<Domain[]>([]);
+  const [domain, setDomain] = useState("");
+  const [domainItems, setDomainItems] = useState<FeedItem[] | null>(null);
+  useEffect(() => { api<Domain[]>(withLang("/api/domains", lang)).then(setFields).catch(() => setFields([])); }, [lang]);
+  useEffect(() => {
+    if (!domain) { setDomainItems(null); return; }
+    setDomainItems(null);
+    api<FeedItem[]>(withLang(`/api/companies/${slug}/feed?domain=${domain}`, lang)).then(setDomainItems).catch(() => setDomainItems([]));
+  }, [domain, slug, lang]);
+  const items = domain ? domainItems ?? [] : ownItems;
   // After a profile change the explanations are rewritten in the background: check back until done.
-  const updating = items.some((i) => i.updating);
+  const updating = ownItems.some((i) => i.updating);
   const [polls, setPolls] = useState(0);
   useEffect(() => {
     if (!updating || polls > 20) return;
@@ -43,6 +54,17 @@ export default function FeedTab({ slug, company, items, canEdit, onFeedback, toa
 
   return (
     <div>
+      <div className="field-pick">
+        <label>
+          <span>{t("dom.label")}</span>
+          <select className="select" value={domain} onChange={(e) => { setDomain(e.target.value); setPages(1); }}>
+            <option value="">{t("dom.own")}</option>
+            {fields.map((f) => <option key={f.key} value={f.key}>{f.name} ({f.opportunities})</option>)}
+          </select>
+        </label>
+        {domain && <span className="note">{t("dom.note", { company })}</span>}
+        {domain && !domainItems && <span className="note">{t("dom.loading")}</span>}
+      </div>
       <div className="feed-toolbar">
         <div className="seg" role="group">
           {FILTERS.map((k) => (
@@ -170,6 +192,7 @@ function FeedItemRow({ slug, company, item, rank, canEdit, onFeedback, toast, on
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="row" style={{ gap: 10 }}>
+          <Logo k={o.logo} size={26} />
           <KindPill kind={o.kind} />
           {o.simulated && <span className="tag warn">{t("prof.simulated")}</span>}
           {o.manually_verified && <span className="tag" title={t("tb.verifiedTitle")}>{t("tb.verified")}</span>}

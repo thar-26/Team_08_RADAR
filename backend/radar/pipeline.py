@@ -13,7 +13,7 @@ import time
 
 from . import db
 from .agents import connector, matcher, profiler
-from .collectors import events, funding, members, testbeds, websites
+from .collectors import events, funding, logos, members, testbeds, websites
 from .config import DEMO_COMPANIES, now_iso
 
 SIM_SLUG = "sim-nordvik-subsea"
@@ -59,6 +59,8 @@ def collect() -> None:
     step("testbeds", testbeds.collect_testbeds)
     step("national testbeds", testbeds.collect_national)
     step("vinnova testbeds", testbeds.collect_vinnova_testbeds)
+    step("member logos", logos.collect_member_logos)
+    step("source logos", logos.collect_source_logos)
     for slug in DEMO_COMPANIES:
         step(f"crawl {slug}", websites.crawl_company, slug)
     step("simulated", seed_simulated)

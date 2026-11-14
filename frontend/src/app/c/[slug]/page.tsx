@@ -9,7 +9,7 @@ import FeedTab from "@/components/company/FeedTab";
 import ProfileTab from "@/components/company/ProfileTab";
 import { ParkTips, ThisWeek } from "@/components/company/ParkTips";
 import { useRole } from "@/components/RoleGate";
-import { ErrorNote, Skeleton, SourceLink, Toast, useFetch } from "@/components/ui";
+import { ErrorNote, Logo, Skeleton, SourceLink, Toast, useFetch } from "@/components/ui";
 import { api, fmtDate, withLang, type CompanyResp, type Connection, type FeedItem } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
@@ -82,7 +82,7 @@ function Company({ slug }: { slug: string }) {
         <div className="shell">
           <div className="spread" style={{ alignItems: "flex-end" }}>
             <div style={{ minWidth: 0 }}>
-              <h1 data-reveal>{c?.name ?? <Skeleton h={64} w={340} />}</h1>
+              <h1 data-reveal className="name-logo">{c && <Logo k={`member-${slug}`} size={56} />}{c?.name ?? <Skeleton h={64} w={340} />}</h1>
               {c && (
                 <div className="meta-line" data-reveal>
                   <Link href="/members">← {t("co.back")}</Link>
@@ -132,7 +132,7 @@ function Company({ slug }: { slug: string }) {
               {(conns.data ?? []).map((x) => (
                 <div key={x.slug} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.3fr)", gap: 40, padding: "32px 0", borderBottom: "1px solid var(--line)" }}>
                   <div>
-                    <h2 style={{ fontSize: "clamp(26px,2.4vw,34px)" }}>{x.profiled ? <Link href={`/c/${x.slug}`} style={{ color: "inherit" }}>{x.name}</Link> : x.name}</h2>
+                    <h2 style={{ fontSize: "clamp(26px,2.4vw,34px)" }} className="name-logo"><Logo k={`member-${x.slug}`} size={40} />{x.profiled ? <Link href={`/c/${x.slug}`} style={{ color: "inherit" }}>{x.name}</Link> : x.name}</h2>
                     <p style={{ fontSize: 18, margin: "12px 0 14px" }}>{x.headline}</p>
                     <div className="row note" style={{ gap: 18 }}>
                       <span>{t("part.similarity", { n: x.similarity.toFixed(2) })}</span>

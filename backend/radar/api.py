@@ -11,12 +11,13 @@ from functools import lru_cache
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from . import geo, auth, db
+from . import geo, auth, db, domains
 from .auth import current_user
 from .agents import concierge, connector, matcher, notifier, profiler
+from .collectors import logos
 from .api_support import public_profile, apply_edit
 from .config import DATA, DEMO_COMPANIES, now_iso, today
 from .translate import Collector, translate
@@ -56,6 +57,18 @@ def _company(slug: str) -> dict:
     return c
 
 
+_LOGO_KEYS: dict[str, object] = {}
+
+
+def _logo_keys() -> set[str]:
+    """Known logo keys, re-read at most once a minute."""
+    import time
+
+    if not _LOGO_KEYS or time.time() - _LOGO_KEYS["t"] > 60:
+        _LOGO_KEYS.update(keys=logos.known(), t=time.time())
+    return _LOGO_KEYS["keys"]
+
+
 def _opp_public(o: dict) -> dict:
     o = dict(o)
     o.pop("text", None)
@@ -66,6 +79,8 @@ def _opp_public(o: dict) -> dict:
     if o["source"] in ("national", "vinnova_projects"):  # each testbed has its own operator
         o["contact_links"] = [{"label": "operator" if o["source"] == "national" else "coordinator", "url": o["apply_url"] or o["url"]}]
     o["manually_verified"] = o["source"] == "national"
+    o["logo"] = logos.key_for_url(o.get("url") or "", _logo_keys())
+    o["domains"] = [k for k, _ in domains.opportunity_domains().get(o["id"], [])]
     if o["kind"] in ("event", "testbed"):  # for the region/city/format filters
         o["region"], o["city"] = geo.region_of(o.get("location"), o.get("location_mode"), o.get("source"))
     return o
@@ -175,8 +190,11 @@ def overview(lang: str = "sv"):
 def companies():
     rows = db.rows("SELECT slug, name, website, bsp_page, demo, profile IS NOT NULL AS profiled, profile_version, updated_at FROM companies WHERE slug NOT LIKE 'sim-%' ORDER BY demo DESC, name")
     eco = {n["slug"]: n for n in _ecosystem()["nodes"]}
+    md = domains.member_domains()
     for r in rows:
         r["industry"] = eco.get(r["slug"], {}).get("industry", "")
+        r["logo"] = f"member-{r['slug']}" if f"member-{r['slug']}" in _logo_keys() else None
+        r["domains"] = [k for k, _ in md.get(r["slug"], [])]
         r["demo"] = bool(r["demo"])
         r["profiled"] = bool(r["profiled"])
     return rows
@@ -305,7 +323,8 @@ def timeline(slug: str, user: dict | None = Depends(current_user)):
 
 
 @app.get("/api/companies/{slug}/feed")
-def feed(slug: str, kind: str | None = None, limit: int = 30, lang: str = "sv", user: dict | None = Depends(current_user)):
+def feed(slug: str, kind: str | None = None, limit: int = 30, lang: str = "sv", domain: str | None = None,
+         user: dict | None = Depends(current_user)):
     """Ranked recommendations with an indicative 1-10 fit score and its reasons:
     the best `limit` of each kind, in one list ordered by score. The page shows
     the top 10 and reveals the rest on request."""
@@ -330,6 +349,9 @@ def feed(slug: str, kind: str | None = None, limit: int = 30, lang: str = "sv", 
         fit, level = matcher.final_score(r, exp)
         scored.append((fit, r, exp, level, updating))
     scored.sort(key=lambda x: -x[0])
+    if domain:  # only this field, still with the company's own fit score
+        od = domains.opportunity_domains()
+        scored = [x for x in scored if domain in {k for k, _ in od.get(x[1]["opp_id"], [])}]
     per_kind: dict[str, int] = {}
     keep = []
     for x in scored:
@@ -760,7 +782,7 @@ def evidence():
 
 @app.get("/api/evidence/{slug}")
 def evidence_top(slug: str, rater: str = "", lang: str = "sv"):
-    items = feed(slug, lang=lang)[:10]
+    items = feed(slug, lang=lang, user=None)[:10]
     mine = {r["opp_id"]: r["rating"] for r in db.rows(
         "SELECT opp_id, rating FROM relevance_ratings WHERE company_slug=? AND rater=?", (slug, rater.strip()[:60]))}
     return [{"rank": i["rank"], "fit": i["fit"], "level": i["level"], "opp_id": i["opportunity"]["id"],
@@ -921,3 +943,60 @@ def company_tip_delete(slug: str, tip_id: int):
     _tips_init()
     db.execute("DELETE FROM park_tips WHERE id=? AND company_slug=?", (tip_id, slug))
     return {"ok": True}
+
+
+
+# ---------------------------------------------------------------- fields and logos
+@app.get("/api/domains")
+def domain_list(lang: str = "sv"):
+    """The fields people can browse by, with how many open opportunities and members each has."""
+    active = {o["id"] for o in db.rows("SELECT * FROM opportunities") if matcher._active(o)}
+    od, md = domains.opportunity_domains(), domains.member_domains()
+    out = []
+    for k in domains.DOMAINS:
+        out.append({"key": k, "name": domains.name(k, _lang(lang)),
+                    "opportunities": sum(1 for i, v in od.items() if i in active and any(d == k for d, _ in v)),
+                    "members": sum(1 for v in md.values() if any(d == k for d, _ in v))})
+    return out
+
+
+@app.get("/api/explore")
+def explore(domains_: str = "", kind: str | None = None, lang: str = "sv", limit: int = 60):
+    """For visitors: open opportunities and member companies in the chosen fields.
+    No company profile is involved, so there is no fit score, only closeness to the field."""
+    from fastapi import Query  # noqa: F401  (documented parameter name below)
+
+    keys = [k for k in domains_.split(",") if k in domains.DOMAINS]
+    if not keys:
+        raise HTTPException(400, "Choose at least one field")
+    od, md = domains.opportunity_domains(), domains.member_domains()
+    picked = []
+    for o in db.rows("SELECT * FROM opportunities"):
+        if not matcher._active(o) or (kind and o["kind"] != kind):
+            continue
+        hit = [sc for d, sc in od.get(o["id"], []) if d in keys]
+        if hit:
+            picked.append((max(hit), o))
+    picked.sort(key=lambda x: -x[0])
+    opps = [_opp_public(o) for _, o in picked[:max(1, min(limit, 150))]]
+    tc = Collector(_lang(lang))
+    _loc_opps(opps, _lang(lang), tc)
+    tc.run()
+    members = []
+    for m in db.rows("SELECT slug, name, website, bsp_page, profile IS NOT NULL AS profiled FROM companies WHERE slug NOT LIKE 'sim-%' ORDER BY name"):
+        if any(d in keys for d, _ in md.get(m["slug"], [])):
+            members.append(m | {"profiled": bool(m["profiled"]),
+                                "logo": f"member-{m['slug']}" if f"member-{m['slug']}" in _logo_keys() else None,
+                                "domains": [d for d, _ in md.get(m["slug"], [])]})
+    return {"opportunities": opps, "members": members}
+
+
+@app.get("/api/logos/{key}")
+def logo(key: str):
+    path = logos.path_for(key)
+    if not path:
+        raise HTTPException(404)
+    types = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml",
+             ".ico": "image/x-icon", ".gif": "image/gif"}
+    return FileResponse(path, media_type=types.get(path.suffix.lower(), "application/octet-stream"),
+                        headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})

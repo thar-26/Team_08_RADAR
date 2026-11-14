@@ -5,7 +5,7 @@ import { PHOTOS } from "@/components/Footer";
 import Scope from "@/components/Scope";
 import Steps from "@/components/Steps";
 import { useRole } from "@/components/RoleGate";
-import { ErrorNote, KindPill, Skeleton, SourceLink, useFetch } from "@/components/ui";
+import { ErrorNote, KindPill, Logo, Skeleton, SourceLink, useFetch } from "@/components/ui";
 import { api, daysUntil, fmtDate, withLang, type Eco, type Member, type Overview } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
@@ -79,7 +79,7 @@ export default function Home() {
               {demo.map((m) => (
                 <Link key={m.slug} href={`/c/${m.slug}`} className="list-row" data-reveal>
                   <div>
-                    <h3>{m.name}</h3>
+                    <h3 className="name-logo"><Logo k={m.logo} size={34} />{m.name}</h3>
                     <div className="note" style={{ marginTop: 4 }}>{m.industry || "—"} · {m.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</div>
                   </div>
                   <span className="arrow" aria-hidden>→</span>
