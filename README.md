@@ -22,11 +22,10 @@ Blue Science Park.
 6. [Tech stack and project structure](#tech-stack-and-project-structure)
 7. [Setup](#setup)
 8. [Running Radar](#running-radar)
-9. [Five-minute demo](#five-minute-demo)
-10. [Tests and quality checks](#tests-and-quality-checks)
-11. [Data sources](#data-sources)
-12. [What was built when](#what-was-built-when)
-13. [Known limits and next steps](#known-limits-and-next-steps)
+9. [Tests and quality checks](#tests-and-quality-checks)
+10. [Data sources](#data-sources)
+11. [What was built when](#what-was-built-when)
+12. [Known limits and next steps](#known-limits-and-next-steps)
 
 ---
 
@@ -269,20 +268,6 @@ python -m pytest tests                 # offline tests
 and the team's relevance ratings. Data is refreshed by running the pipeline, not live on every page view;
 every item shows when it was retrieved.
 
-## Five-minute demo
-
-1. Open Radar and choose **Blue Science Park** on the start screen. Show the **Park overview**: which
-   members have strong matches and deadlines coming up.
-2. Under **Who does this opportunity fit?**, pick the EU wave and tidal energy call. Ocean Harvesting
-   fits best. Click **Send tip**.
-3. Switch the view (header) to **Ocean Harvesting**. Show **Tips from Blue Science Park**, **This week
-   and next** and the feed: score, *Why this match?*, missing information, source and date, contact.
-4. Open the **Profile** tab: facts with verbatim quotes and links, inferred interests, what is missing.
-   Signed in as staff or a member, add a priority and watch the feed re-rank.
-5. **Ask Radar** a relevant question, then an unrelated one and an override attempt: it answers with
-   citations, then politely refuses.
-
-Before each rehearsal run `python -m radar.reset_demo` so the demo starts clean.
 
 ## Tests and quality checks
 
@@ -314,9 +299,9 @@ Photos: Wikimedia Commons (CC0 and CC BY-SA, credited in their captions; see
 
 | | What |
 |---|---|
-| **Before the hackathon** (12 Nov, team kick-off and practice, allowed by the organisers) | Data collection, the ten agents, profiles with fact/inferred labels and verification, ranking, Concierge and Guard, Swedish/English interface, email alerts, profile corrections with Google sign-in, Bolagsverket facts, Postgres support |
-| **During the hackathon** (from 13 Nov) | 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start |
-| **Reused, not built by us** | Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq, a multilingual embedding model, public APIs and data, Blue Science Park's colours as a visual reference |
+| (Team kick-off and practice, allowed by the organisers) | Data collection, the ten agents, profiles with fact/inferred labels and verification, ranking, Concierge and Guard, Swedish/English interface, email alerts, profile corrections with Google sign-in, Bolagsverket facts, Postgres support |
+| 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start |
+| Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq, a multilingual embedding model, public APIs and data, Blue Science Park's colours as a visual reference |
 
 ## Known limits and next steps
 
