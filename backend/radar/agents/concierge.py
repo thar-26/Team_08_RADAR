@@ -74,9 +74,20 @@ def _context(slug: str, question: str = "", private: bool = False) -> tuple[str,
             continue
         tag = "company-confirmed" if (c.get("origin") == "user" or c.get("review") == "confirmed") else c["status"]
         lines.append(f"- ({tag}, {c['section']}) {c['statement']}")
-    lines.append("\nOPPORTUNITIES RANKED FOR YOUR COMPANY:")
+    lines.append("\nOPPORTUNITIES FOR YOUR COMPANY (best funding calls, upcoming events sorted by date, testbeds; fit is 1-10):")
     stored = {m["opp_id"]: m for m in db.rows("SELECT * FROM matches WHERE company_slug=?", (slug,))}
-    ranked = matcher.rank(slug, private=private)[:14]
+    # The best of each type, so a question about events or testbeds always has
+    # something to work with (the overall top list is often all funding calls).
+    all_ranked = matcher.rank(slug, private=private)
+    by_kind = {k: [r for r in all_ranked if r["kind"] == k] for k in ("funding", "event", "testbed")}
+    def fit_of(r):
+        m = stored.get(r["opp_id"])
+        return matcher.final_score(r, db.loads(m["explanation"], {}) if m else None)[0]
+
+    # Events that actually fit (possible or strong), soonest first; if none fit, the best few.
+    fitting = [r for r in by_kind["event"] if fit_of(r) >= matcher.POSSIBLE] or by_kind["event"][:4]
+    events = sorted(fitting, key=lambda r: (db.one("SELECT event_date FROM opportunities WHERE id=?", (r["opp_id"],)) or {}).get("event_date") or "9999")[:6]
+    ranked = by_kind["funding"][:8] + events + by_kind["testbed"][:4]
     for i, r in enumerate(ranked, 1):
         o = db.one("SELECT * FROM opportunities WHERE id=?", (r["opp_id"],))
         rid = f"O{i}"
@@ -87,7 +98,8 @@ def _context(slug: str, question: str = "", private: bool = False) -> tuple[str,
             why = f" Why: {exp.get('why', '')}"
         src = SOURCE_NAMES.get(o["source"], o["source"])
         fit = matcher.final_score(r, db.loads(stored[r["opp_id"]]["explanation"], {}) if r["opp_id"] in stored else None)[0]
-        lines.append(f"[{rid}] {o['kind']} | fit {fit}/10 | source: {src} | {o['title']} | {when} | {o['summary'][:350]}{why}")
+        place = f" | where: {o.get('location_mode') or '-'} {o.get('location') or ''}".rstrip() if o["kind"] in ("event", "testbed") else ""
+        lines.append(f"[{rid}] {o['kind']} | fit {fit}/10 | source: {src} | {o['title']} | {when}{place} | {o['summary'][:350]}{why}")
         refs[rid] = {"title": o["title"], "url": o["url"], "date": o.get("deadline") or o.get("event_date") or o.get("fetched_at", "")[:10], "kind": o["kind"], "opp_id": o["id"]}
     relevant = connector.search(question, top=6, exclude=slug) if question else []
     if relevant:
