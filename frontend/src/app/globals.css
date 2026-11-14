@@ -430,3 +430,4 @@ details[open] > summary::before { content: "− "; }
 .ex-opp { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; padding: 18px 0; }
 .ex-opp a.title { display: block; font-weight: 700; font-size: 17px; margin-top: 4px; color: var(--ink); }
 .ex-member { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.list-row.ex-opp { grid-template-columns: 34px minmax(0, 1fr) !important; align-items: start; }
