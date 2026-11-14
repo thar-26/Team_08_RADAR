@@ -11,6 +11,7 @@ from .. import db, llm
 from ..config import MODEL_REASONING, now_iso, today
 from ..schemas import ConciergeAnswer
 from . import guard, matcher
+from .. import embed
 from . import connector
 from .connector import public_text
 from ..api_support import is_private
@@ -101,7 +102,10 @@ def _context(slug: str, question: str = "", private: bool = False) -> tuple[str,
         place = f" | where: {o.get('location_mode') or '-'} {o.get('location') or ''}".rstrip() if o["kind"] in ("event", "testbed") else ""
         lines.append(f"[{rid}] {o['kind']} | fit {fit}/10 | source: {src} | {o['title']} | {when}{place} | {o['summary'][:350]}{why}")
         refs[rid] = {"title": o["title"], "url": o["url"], "date": o.get("deadline") or o.get("event_date") or o.get("fetched_at", "")[:10], "kind": o["kind"], "opp_id": o["id"]}
-    relevant = connector.search(question, top=6, exclude=slug) if question else []
+    try:
+        relevant = connector.search(question, top=6, exclude=slug) if question else []
+    except embed.Unavailable:  # online demo without the embedding model
+        relevant = []
     if relevant:
         lines.append("\nMEMBERS MOST RELEVANT TO THE QUESTION (public information only):")
         for k, m in enumerate(relevant, 1):

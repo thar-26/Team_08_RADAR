@@ -14,11 +14,17 @@ os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 _model = None
 
 
+class Unavailable(RuntimeError):
+    """The embedding model is not installed (the online demo runs without it)."""
+
+
 def _get_model():
     global _model
     if _model is None:
-        from fastembed import TextEmbedding
-
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as e:
+            raise Unavailable("embedding model not installed") from e
         _model = TextEmbedding(EMBED_MODEL, cache_dir=str(MODELS_DIR))
     return _model
 

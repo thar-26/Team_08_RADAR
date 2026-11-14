@@ -14,18 +14,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from . import geo, auth, db, domains
+from . import geo, auth, db, domains, embed
 from .auth import current_user
 from .agents import concierge, connector, matcher, notifier, profiler
 from .collectors import logos
 from .api_support import public_profile, apply_edit
-from .config import DATA, DEMO_COMPANIES, now_iso, today
+from .config import DATA, DEMO_COMPANIES, HOSTED_DEMO, now_iso, today
 from .translate import Collector, translate
 
 app = FastAPI(title="Radar API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    # Plus the online demo's website address(es), from RADAR_ALLOWED_ORIGINS.
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"]
+    + [o.strip().rstrip("/") for o in os.getenv("RADAR_ALLOWED_ORIGINS", "").split(",") if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -156,9 +158,14 @@ def _loc_profile(p: dict, tc: Collector) -> None:
         tc.add(m, "note")
 
 
+def _not_in_demo() -> None:
+    if HOSTED_DEMO:
+        raise HTTPException(503, "Not available in the online demo. Run Radar locally to use this.")
+
+
 @app.get("/api/health")
 def health():
-    return {"ok": True, "time": now_iso()}
+    return {"ok": True, "time": now_iso(), "hosted_demo": HOSTED_DEMO}
 
 
 @app.get("/api/overview")
@@ -203,7 +210,10 @@ def companies():
 @app.get("/api/members/search")
 def member_search(q: str, lang: str = "sv", exclude: str | None = None):
     """Find members by expertise or technology, from public descriptions only."""
-    out = connector.search(q, top=8, exclude=exclude)
+    try:
+        out = connector.search(q, top=8, exclude=exclude)
+    except embed.Unavailable as e:
+        raise HTTPException(503, "Member search needs the local version of Radar") from e
     # Member pages are mostly Swedish and facts mostly English: translate both ways (cached).
     for r, txt in zip(out, translate([r["snippet"] for r in out], _lang(lang))):
         r["snippet"] = txt
@@ -243,6 +253,7 @@ def build(slug: str, user: dict | None = Depends(current_user)):
     """Profile any member on demand: crawl its public pages, profile, verify, rank.
     Anyone may profile a member that has no profile yet (only public sources are
     used). Rebuilding an existing profile is for the company itself or staff."""
+    _not_in_demo()
     from .collectors import websites
 
     c = _company(slug)
@@ -289,6 +300,7 @@ def _audit(slug: str, version: int, user: dict | None, action: str, claim_id: st
 
 @app.post("/api/companies/{slug}/profile")
 def edit_profile(slug: str, e: Edit, user: dict | None = Depends(current_user)):
+    _not_in_demo()
     auth.require_edit(user, slug)  # only the company's own members (or staff) may edit
     c = _company(slug)
     try:
@@ -493,6 +505,7 @@ def registry_get(slug: str, user: dict | None = Depends(current_user)):
 
 @app.post("/api/companies/{slug}/registry")
 def registry_set(slug: str, r: RegistryIn, user: dict | None = Depends(current_user)):
+    _not_in_demo()
     auth.require_edit(user, slug)  # only the company's own members (or staff) may edit
     """Look up the member's organisation number at Bolagsverket and, if the
     official name matches the member, add the official facts to the profile."""
@@ -544,6 +557,7 @@ def alerts_status(slug: str, user: dict | None = Depends(current_user)):
 
 @app.post("/api/companies/{slug}/alerts")
 def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current_user)):
+    _not_in_demo()
     _company(slug)
     auth.require_edit(user, slug)  # alert settings and emails are the company's own
     if not a.consent:
@@ -558,6 +572,7 @@ def alerts_subscribe(slug: str, a: AlertsIn, user: dict | None = Depends(current
 
 @app.post("/api/companies/{slug}/alerts/check")
 def alerts_check(slug: str, user: dict | None = Depends(current_user)):
+    _not_in_demo()
     _company(slug)
     auth.require_edit(user, slug)  # alert settings and emails are the company's own
     return notifier.run(slug) | alerts_status(slug, user=user)
@@ -565,6 +580,7 @@ def alerts_check(slug: str, user: dict | None = Depends(current_user)):
 
 @app.post("/api/companies/{slug}/alerts/digest")
 def alerts_digest(slug: str, user: dict | None = Depends(current_user)):
+    _not_in_demo()
     """Send the weekly digest now (manual trigger for demos and staff)."""
     _company(slug)
     auth.require_edit(user, slug)  # alert settings and emails are the company's own
@@ -580,7 +596,8 @@ def _start_scheduler() -> None:
     notifier.start_scheduler()
     # Rank every profiled member once in the background, so the first page loads
     # (including the park overview) are fast during a demo.
-    threading.Thread(target=lambda: park_overview(lang="sv"), daemon=True).start()
+    if not HOSTED_DEMO:  # serverless: no background work
+        threading.Thread(target=lambda: park_overview(lang="sv"), daemon=True).start()
 
 
 @app.delete("/api/companies/{slug}/alerts")

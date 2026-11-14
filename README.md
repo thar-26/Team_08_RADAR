@@ -166,7 +166,8 @@ radar/
 │   │   ├── evaluate_demo.py  writes docs/EVALUATION.md
 │   │   └── reset_demo.py     snapshot / restore for rehearsals
 │   ├── tests/                offline tests (throw-away database)
-│   └── requirements.txt
+│   ├── api/index.py, vercel.json, deploy/   online demo on Vercel (see below)
+│   └── requirements.txt, requirements-local.txt
 ├── frontend/
 │   └── src/app, src/components, src/lib   pages, components, API client, Swedish/English texts
 ├── data/                     member list, hand-verified national testbeds, eval report
@@ -200,7 +201,7 @@ Windows (Command Prompt):
 ```
 cd backend
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pip install -r requirements-local.txt
 .venv\Scripts\python -m playwright install chromium
 .venv\Scripts\python -m radar.pipeline all
 ```
@@ -210,7 +211,7 @@ macOS / Linux:
 ```bash
 cd backend
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-local.txt
 .venv/bin/python -m playwright install chromium
 .venv/bin/python -m radar.pipeline all
 ```
@@ -278,6 +279,32 @@ python -m pytest tests                 # offline tests
 and the team's relevance ratings. Data is refreshed by running the pipeline, not live on every page view;
 every item shows when it was retrieved.
 
+
+## Online demo on Vercel
+
+A reduced, read-mostly copy of Radar can run on Vercel so anyone can open it with a link.
+Keys are entered in Vercel's project settings, never committed.
+
+**Works online:** every page, the profiled members, matches and 1–10 scores, park overview and tips,
+Explore with fields, logos and Ask Radar. **Switched off online** (they need the local version):
+signing in and correcting profiles, profiling new members, member search by expertise and email alerts.
+Changes made online are lost when Vercel restarts the server. The online demo uses your Groq key for
+Ask Radar and new translations.
+
+1. Refresh the demo data (a cleaned copy of the database with no emails, chats, sign-ins or ratings,
+   plus the logos) and commit it:
+   ```
+   cd backend
+   .venv\Scripts\python -m radar.make_demo_db
+   ```
+2. **API project:** on vercel.com, *Add New → Project*, import this repository, set **Root Directory**
+   to `backend`, framework *Other*. Environment variable: `GROQ_API_KEY`. Deploy and note the address
+   (e.g. `https://radar-api.vercel.app`).
+3. **Website project:** add a second project from the same repository with **Root Directory**
+   `frontend` (Next.js is detected). Environment variables:
+   `NEXT_PUBLIC_API_URL` = the API address, `NEXT_PUBLIC_HOSTED_DEMO` = `1`,
+   `AUTH_SECRET` = any long random string. Deploy and note the address.
+4. In the API project, add `RADAR_ALLOWED_ORIGINS` = the website address, then *Redeploy*.
 
 ## Tests and quality checks
 

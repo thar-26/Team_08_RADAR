@@ -8,7 +8,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]  # .../radar
-DATA = ROOT / "data"
+# RADAR_DATA moves the data folder (the online demo uses a writable temp folder).
+DATA = Path(os.getenv("RADAR_DATA", ROOT / "data"))
 CACHE = DATA / "cache"
 MODELS_DIR = DATA / "models"
 DB_PATH = Path(os.getenv("RADAR_DB", DATA / "radar.db"))
@@ -70,4 +71,10 @@ def now_iso() -> str:
 
 
 for p in (DATA, CACHE, MODELS_DIR):
-    p.mkdir(parents=True, exist_ok=True)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError:  # read-only file system (online demo): nothing to create
+        pass
+
+# Online demo (Vercel): read-mostly, no embedding model, no sign-in. See README.
+HOSTED_DEMO = os.getenv("RADAR_HOSTED_DEMO", "").strip() in ("1", "true", "yes")

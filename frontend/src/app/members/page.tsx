@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorNote, Logo, Skeleton, useFetch } from "@/components/ui";
-import { api, withLang, type Member, type MemberHit } from "@/lib/api";
+import { api, HOSTED, withLang, type Member, type MemberHit } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 export default function Members() {
@@ -64,7 +64,7 @@ export default function Members() {
           <p className="lead">{t("members.lede")}</p>
         </div>
       </section>
-      <section className="section" style={{ paddingTop: 48, paddingBottom: 0 }}><div className="shell">
+      {!HOSTED && <section className="section" style={{ paddingTop: 48, paddingBottom: 0 }}><div className="shell">
         <h2 style={{ marginBottom: 6 }}>{t("ms.title")}</h2>
         <p className="note" style={{ margin: "0 0 16px", maxWidth: 680 }}>{t("ms.lede")}</p>
         <form className="row" style={{ gap: 10 }} onSubmit={(e) => { e.preventDefault(); search(query); }}>
@@ -103,7 +103,7 @@ export default function Members() {
             {hits.length > 0 && <p className="note" style={{ marginTop: 12 }}>{t("ms.caution")}</p>}
           </div>
         )}
-      </div></section>
+      </div></section>}
       <section className="section" style={{ paddingTop: 48 }}><div className="shell">
         <h2 style={{ marginBottom: 16 }}>{t("ms.all")}</h2>
         {error && <ErrorNote error={error} />}
@@ -123,6 +123,8 @@ export default function Members() {
               </span>
               {m.profiled ? (
                 <Link className="btn small" href={`/c/${m.slug}`}>{t("members.open")}</Link>
+              ) : HOSTED ? (
+                <a className="btn quiet small" href={m.bsp_page} target="_blank" rel="noreferrer">Blue Science Park ↗</a>
               ) : (
                 <button className="btn quiet small" disabled={!!busy || !m.website} onClick={() => build(m.slug)}>
                   {busy === m.slug ? t("members.building") : t("members.build")}

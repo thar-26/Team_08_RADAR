@@ -1,4 +1,6 @@
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/** Built for the online demo (Vercel): editing, sign-in, member search and alerts are off. */
+export const HOSTED = process.env.NEXT_PUBLIC_HOSTED_DEMO === "1";
 
 /** Error with the HTTP status, so pages can tell "sign in" (401) from "no access" (403). */
 export class ApiError extends Error {

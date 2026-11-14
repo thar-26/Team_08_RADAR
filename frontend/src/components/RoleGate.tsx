@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, type Member } from "@/lib/api";
+import { api, HOSTED, type Member } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 /** Simulated sign-in for the demo: choosing "Blue Science Park" or a member
@@ -98,8 +98,8 @@ function RoleDialog({ onChoose, onClose }: { onChoose: (r: Role) => void; onClos
           </div>
         </div>
 
-        <p className="gate-note">{t("gate2.simulated")}{" "}
-          <Link href="/login" onClick={() => onChoose({ kind: "visitor" })}>{t("gate2.realLogin")}</Link>
+        <p className="gate-note">{HOSTED ? t("demo.gate") : t("gate2.simulated")}{" "}
+          {!HOSTED && <Link href="/login" onClick={() => onChoose({ kind: "visitor" })}>{t("gate2.realLogin")}</Link>}
         </p>
         <button className="textbtn gate-skip" onClick={() => { onChoose({ kind: "visitor" }); router.push("/explore"); }}>{t("gate2.visitor")}</button>
       </div>

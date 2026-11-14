@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { api, fmtDate, type Alerts } from "@/lib/api";
+import { api, fmtDate, HOSTED, type Alerts } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 const KINDS = ["funding", "event", "testbed"] as const;
@@ -12,6 +12,9 @@ const KINDS = ["funding", "event", "testbed"] as const;
  *  representatives (and staff) see them; the API enforces the same rule. */
 export default function AlertsTab({ slug, company, canEdit, toast }: { slug: string; company: string; canEdit: boolean; toast: (m: string) => void }) {
   const { t } = useI18n();
+  if (HOSTED) {
+    return <div className="panel" style={{ marginTop: 48, maxWidth: 620 }}><h3>{t("al.signIn")}</h3><p style={{ margin: "8px 0 0" }}>{t("demo.alerts")}</p></div>;
+  }
   if (!canEdit) {
     return (
       <div className="panel navy" style={{ marginTop: 48, maxWidth: 620 }}>

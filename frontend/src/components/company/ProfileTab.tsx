@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import RegistryPanel from "@/components/company/RegistryPanel";
 import { SourceLink } from "@/components/ui";
-import { api, fmtDate, host, type Claim, type FeedItem, type Me, type Profile } from "@/lib/api";
+import { api, fmtDate, HOSTED, host, type Claim, type FeedItem, type Me, type Profile } from "@/lib/api";
 import { useI18n, type Key } from "@/lib/i18n";
 
 const ORDER = ["offerings", "technologies", "applications", "markets", "geography", "priorities", "interests"];
@@ -76,7 +76,12 @@ export default function ProfileTab({ slug, company, profile, canEdit, onSaved, t
       </div>
 
       <aside className="sticky">
-        {canEdit ? (
+        {HOSTED ? (
+          <div className="panel navy">
+            <h3>{t("fix.title")}</h3>
+            <p style={{ margin: "8px 0 0", fontSize: 15, color: "rgba(255,255,255,.85)" }}>{t("demo.editing")}</p>
+          </div>
+        ) : canEdit ? (
           <div className="panel navy">
             <h3>{t("prof.refineTitle")}</h3>
             <p style={{ margin: "8px 0 18px", fontSize: 15, color: "rgba(255,255,255,.8)" }}>{t("prof.refineNote")}</p>

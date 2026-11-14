@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
+import DemoNote from "@/components/DemoNote";
 import Footer from "@/components/Footer";
 import Masthead from "@/components/Masthead";
 import Providers from "@/components/Providers";
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <RoleProvider>
           <a className="skip" href="#main">Hoppa till innehållet / Skip to content</a>
           <Masthead />
+          <DemoNote />
           <main id="main">{children}</main>
           <Footer />
         </RoleProvider>
