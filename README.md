@@ -300,8 +300,8 @@ Photos: Wikimedia Commons (CC0 and CC BY-SA, credited in their captions; see
 | | What |
 |---|---|
 | (Team kick-off and practice, allowed by the organisers) | Data collection, the ten agents, profiles with fact/inferred labels and verification, ranking, Concierge and Guard, Swedish/English interface, email alerts, profile corrections with Google sign-in, Bolagsverket facts, Postgres support |
-| 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start |
-| Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq, a multilingual embedding model, public APIs and data, Blue Science Park's colours as a visual reference |
+| **Built during the hackathon** | 1–10 fit score with reasons; national testbeds; member search and cross-company Concierge questions; event filters; weekly digest; evidence page; privacy rules (private priorities, per-company data, per-visitor chat, strict domain matching); start screen with Blue Science Park and member views; park overview, "who fits this opportunity?" and tips; "This week"; compact footer and homepage steps; demo reset; one-click start |
+| **Reused, not built by us** | Open-source libraries (FastAPI, Next.js, Auth.js, fastembed, Playwright, trafilatura), hosted models on Groq, a multilingual embedding model, public APIs and data, Blue Science Park's colours as a visual reference |
 
 ## Known limits and next steps
 
