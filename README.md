@@ -1,12 +1,17 @@
-# Radar: a Virtual Science Park for Blue Science Park
+# Radar – Team 8
+
+**A Virtual Science Park for Blue Science Park**
 
 Radar helps companies in the Blue Science Park ecosystem in Karlskrona find funding, events, testbeds and
 partners across Sweden and Europe. AI agents build an evidence-backed profile of each member from public
 sources, watch Swedish and EU opportunities, and explain, with a source link and date on every claim, why
 an opportunity matters to that company and how well it fits (an indicative 1–10 score).
 
-Built for **BUILD Hackathon 2026** (Karlskrona, 13–15 November), challenge *Virtual Science Park* by
-Blue Science Park.
+Built by **Team 8** for **BUILD Hackathon 2026** (Karlskrona, 13–15 November), challenge
+*Virtual Science Park* by Blue Science Park.
+
+**Live online demo:** https://radar-for-blue-science-park-8msd.vercel.app
+(view and explore mode; the full version runs locally, see Setup)
 
 > A prototype from BUILD Hackathon 2026 in Karlskrona. Not an official Blue Science Park service.
 
