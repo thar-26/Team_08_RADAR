@@ -25,8 +25,9 @@ from .translate import Collector, translate
 app = FastAPI(title="Radar API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    # Plus the online demo's website address(es), from RADAR_ALLOWED_ORIGINS.
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Locally only the website on port 3000 (plus RADAR_ALLOWED_ORIGINS). The online demo
+    # has no sign-in and only public data, so any website address may read it.
+    allow_origins=["*"] if HOSTED_DEMO else ["http://localhost:3000", "http://127.0.0.1:3000"]
     + [o.strip().rstrip("/") for o in os.getenv("RADAR_ALLOWED_ORIGINS", "").split(",") if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
